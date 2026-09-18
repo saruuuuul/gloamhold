@@ -288,6 +288,15 @@ function start(state){
   loadTuning();
   LENS_PRESETS = TUNING.optics.presets;
   el('buildStamp').textContent = 'Build ' + BUILD;
+  /* The artifact viewer never grants a page download permission, so the
+     Save button would silently do nothing there. Copy is the path that works
+     everywhere; the file download is for the deployed Pages build. */
+  try{
+    if(window.claude){
+      el('btnSaveLog').hidden = true;
+      el('logNote').textContent = 'Saving to a file is disabled in this preview — use Copy. The deployed build saves a .json.';
+    }
+  }catch(e){}
   el('buildStampPause').textContent = 'Build ' + BUILD;
   if(state && state.cfg){ for(var k in cfg) if(k in state.cfg) cfg[k]=state.cfg[k]; }
   var okGL = initGL();
