@@ -22,6 +22,9 @@ python3 -m http.server 8000 --directory dist   # serve for a phone on the same w
 
 Push to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`.
 
+On Windows use `python build.py` if `python3` is not on PATH. Nothing else differs; there
+are no native dependencies.
+
 `dist/` is generated and gitignored. Never hand-edit it — edit `src/` and rebuild.
 
 ## How the build works, and what it forbids
