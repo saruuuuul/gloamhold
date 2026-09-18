@@ -1,0 +1,232 @@
+
+<!-- ======================= TITLE / SETUP ======================= -->
+<section class="panel" id="pTitle">
+ <div class="sheet">
+  <div class="brand">
+    <h1>GLOAMHOLD</h1>
+    <div class="sub">Dichoptic dungeon &middot; side-by-side stereo</div>
+  </div>
+  <p class="lede">A small overworld-style dungeon built so that neither eye can finish it alone. The two halves of the screen feed one eye each through a Cardboard-style viewer. Set the weaker eye below, then push the stronger eye's contrast down until the game is just barely winnable.</p>
+
+  <div class="group">
+    <h2>Eyes</h2>
+    <div class="row">
+      <span class="lbl">Weaker (amblyopic) eye</span>
+      <div class="seg" id="segEye">
+        <button data-v="left" aria-pressed="false">Left eye</button>
+        <button data-v="right" aria-pressed="true">Right eye</button>
+      </div>
+      <p class="hint">The weaker eye always gets full contrast. Everything below throttles the <em>other</em> one.</p>
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngStrong">Stronger-eye contrast <span class="val" id="vStrong">40%</span></label>
+      <input type="range" id="rngStrong" min="5" max="100" step="5" value="40">
+      <p class="hint">Start high (80–100%) for the first session. Lower it until enemies in the stronger eye are faint but still detectable. Too low and the eye stops contributing; too high and it keeps suppressing.</p>
+    </div>
+    <div class="row">
+      <span class="lbl">Adaptive staircase</span>
+      <div class="seg" id="segAdapt">
+        <button data-v="1" aria-pressed="true">On</button>
+        <button data-v="0" aria-pressed="false">Off</button>
+      </div>
+      <p class="hint">Clear a room without taking a hit &rarr; stronger-eye contrast drops one step. Take damage &rarr; it comes back up. The game finds your threshold instead of you guessing it.</p>
+    </div>
+    <div class="row">
+      <span class="lbl">Live preview <span class="val">as configured</span></span>
+      <div id="prevWrap"><canvas id="prev" width="600" height="208"></canvas></div>
+      <p class="hint">Two eye views with a wall, your character, one enemy and a key. Hold the viewer up to it and set the sliders until the faint half is faint but not gone.</p>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>How the eyes are split</h2>
+    <div class="seg" id="segMode">
+      <button data-v="rebalance" aria-pressed="true">Contrast rebalance</button>
+      <button data-v="split" aria-pressed="false">Forced fusion</button>
+    </div>
+    <p class="hint" id="modeHelp"></p>
+    <div class="legend">
+      <span><i style="background:#57bf92"></i>both eyes</span>
+      <span><i style="background:#cf4a3e"></i>weak eye</span>
+      <span><i style="background:#e8b13f"></i>strong eye</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Viewer</h2>
+    <div class="row">
+      <label class="lbl" for="rngSep">Eye separation <span class="val" id="vSep">0 px</span></label>
+      <input type="range" id="rngSep" min="-60" max="60" step="2" value="0">
+      <p class="hint">Nudge until the two images sit on top of each other without effort. Negative pulls them together.</p>
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngZoom">Image scale <span class="val" id="vZoom">100%</span></label>
+      <input type="range" id="rngZoom" min="60" max="140" step="5" value="100">
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnTilt">Enable head-tilt steering</button>
+      <button class="btn ghost" id="btnFull">Fullscreen</button>
+      <button class="btn ghost" id="btnDevTitle">Tuning panel</button>
+    </div>
+    <p class="hint">A Bluetooth gamepad is the most comfortable control in a headset: stick or d-pad to move, any face button to swing. Keyboard (WASD / arrows + space) and on-screen thumb zones also work.</p>
+  </div>
+
+  <div class="group">
+    <h2>Lens correction</h2>
+    <p class="hint">Cardboard-style lenses magnify, which bends straight lines outward (pincushion). The fix is to bend the image the other way before it reaches the lens. This runs on the GPU as a barrel warp, per eye, with optional per-channel correction for the colour fringing cheap plastic lenses add at the edges.</p>
+    <div class="seg" id="segLens">
+      <button data-v="off" aria-pressed="true">Off</button>
+      <button data-v="cardboard" aria-pressed="false">Cardboard</button>
+      <button data-v="strong" aria-pressed="false">Strong</button>
+      <button data-v="custom" aria-pressed="false">Custom</button>
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngK1">Barrel k1 <span class="val" id="vK1">0.22</span></label>
+      <input type="range" id="rngK1" min="0" max="0.6" step="0.01" value="0.22">
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngK2">Barrel k2 <span class="val" id="vK2">0.10</span></label>
+      <input type="range" id="rngK2" min="0" max="0.6" step="0.01" value="0.10">
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngChroma">Colour-fringe correction <span class="val" id="vChroma">0.003</span></label>
+      <input type="range" id="rngChroma" min="0" max="0.012" step="0.001" value="0.003">
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngLensOff">Lens centre offset <span class="val" id="vLensOff">0 px</span></label>
+      <input type="range" id="rngLensOff" min="-60" max="60" step="2" value="0">
+      <p class="hint">Moves the centre of each warp, not the picture. Set this to sit under the middle of your lenses &mdash; if it is off, the correction is off-axis and the edges stay bent on one side.</p>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnGrid">Calibrate against a grid</button>
+    </div>
+    <p class="hint" id="lensNote">Put the viewer on with the grid up and raise k1 until the lines look straight all the way to the edges, then use k2 to fix whatever is left in the corners. k1 alone usually gets you most of the way. These are a perceptual scale, not a headset&rsquo;s published coefficients &mdash; the grid is the calibration, not the number.</p>
+  </div>
+
+  <div class="group">
+    <h2>Before you start</h2>
+    <p class="hint">Hold the phone in the viewer and look at the alignment cross on the next screen. You should see <strong>one complete cross</strong> — a vertical line and a horizontal line crossing inside the ring. If one line is missing, that eye is being suppressed and the settings need adjusting before the dungeon is worth playing.</p>
+    <div class="actions">
+      <button class="btn" id="btnStart">Check alignment &rarr;</button>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Not a medical device.</strong> This is a hobby build, not a treatment. Dichoptic training for amblyopia is an active research area with mixed results and it belongs under the supervision of an optometrist or ophthalmologist who has actually measured your acuity, stereoacuity and suppression. Stop immediately and stop using it if you get headache, nausea, eye strain or double vision that persists after you take the viewer off. Children in particular should only do this on a clinician's instruction, since the alternative treatments they might be skipping have real evidence behind them.
+  </div>
+  <p class="hint" style="font-size:11px">Built with generative AI (Claude). Personal / internal use. <span id="buildStamp"></span></p>
+ </div>
+</section>
+
+<!-- ======================= NONIUS / SUPPRESSION CHECK ======================= -->
+<section class="panel" id="pCheck" hidden>
+ <div class="sheet">
+  <div class="brand"><h1 style="font-size:clamp(22px,5vw,30px)">Alignment check</h1>
+  <div class="sub">nonius cross</div></div>
+  <p class="lede">Put the viewer on. Each eye is being shown one bar of a cross, plus a ring that both eyes see. Count what you can see.</p>
+  <div class="group">
+    <div class="actions">
+      <button class="btn" id="btnCheckShow">Show the cross</button>
+    </div>
+    <p class="hint" id="checkHint">The cross replaces the whole screen. Answer with the buttons that appear under it, or press 1 / 2 / 3.</p>
+  </div>
+  <div class="group" id="checkResult" hidden>
+    <h2>Result</h2>
+    <p class="hint" id="checkText"></p>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btnEnter">Enter the dungeon &rarr;</button>
+    <button class="btn ghost" id="btnBackTitle">Back to settings</button>
+  </div>
+ </div>
+</section>
+
+<!-- ======================= PAUSE / SESSION ======================= -->
+<section class="panel" id="pPause" hidden>
+ <div class="sheet">
+  <div class="brand"><h1 style="font-size:clamp(22px,5vw,30px)" id="pauseTitle">Paused</h1>
+  <div class="sub" id="pauseSub">gloamhold</div></div>
+
+  <div class="group">
+    <h2>This session</h2>
+    <dl class="kv" id="statList"></dl>
+  </div>
+
+  <div class="group" id="sparkGroup">
+    <h2>Stronger-eye contrast over time</h2>
+    <div id="sparkWrap"><canvas id="spark" width="1160" height="320"></canvas></div>
+    <p class="hint">Downward is progress: the weaker eye is carrying more of the game. A flat line near the top means the staircase never got a clean room — make the dungeon easier, not the contrast lower.</p>
+  </div>
+
+  <div class="group">
+    <h2>Adjust</h2>
+    <div class="row">
+      <label class="lbl" for="rngStrong2">Stronger-eye contrast <span class="val" id="vStrong2">40%</span></label>
+      <input type="range" id="rngStrong2" min="5" max="100" step="5" value="40">
+    </div>
+    <div class="row">
+      <label class="lbl" for="rngSep2">Eye separation <span class="val" id="vSep2">0 px</span></label>
+      <input type="range" id="rngSep2" min="-60" max="60" step="2" value="0">
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Session log</h2>
+    <p class="hint">Everything this run recorded — settings, the contrast trajectory, per-room outcomes, alignment answers and the exact tuning in force. Paste it into a chat and the next round of changes is based on what happened instead of on a hunch.</p>
+    <div class="actions">
+      <button class="btn ghost" id="btnCopyLog">Copy session log</button>
+      <button class="btn ghost" id="btnSaveLog">Save as file</button>
+    </div>
+    <p class="hint" id="logNote"></p>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="btnResume">Resume</button>
+    <button class="btn ghost" id="btnRecheck">Alignment check</button>
+    <button class="btn ghost" id="btnDev">Tuning panel</button>
+    <button class="btn ghost" id="btnQuit">End session</button>
+  </div>
+  <p class="hint" id="buildStampPause"></p>
+ </div>
+</section>
+
+<!-- ======================= DEV TUNING ======================= -->
+<section class="panel" id="pDev" hidden>
+ <div class="sheet">
+  <div class="brand"><h1 style="font-size:clamp(22px,5vw,30px)">Tuning</h1>
+  <div class="sub">live parameters</div></div>
+  <p class="lede">Every number the engine runs on. Movement, friction and the staircase take effect on the next frame; sizes and hit points apply to enemies spawned from here on, so use <em>Respawn this room</em> to see them.</p>
+  <div class="actions">
+    <button class="btn" id="btnDevBack">Back</button>
+    <button class="btn ghost" id="btnRespawn">Respawn this room</button>
+    <button class="btn ghost" id="btnResetTune">Reset to defaults</button>
+  </div>
+  <div id="devFields"></div>
+  <div class="group">
+    <h2>Profile</h2>
+    <p class="hint">The whole tuning set as JSON. Copy it to keep a profile that worked, or paste one in and load it.</p>
+    <textarea id="tuneJson" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="btn ghost" id="btnLoadJson">Load from JSON</button>
+      <button class="btn ghost" id="btnCopyJson">Copy JSON</button>
+    </div>
+    <p class="hint" id="jsonNote"></p>
+  </div>
+ </div>
+</section>
+
+<!-- ======================= NONIUS ANSWER BAR ======================= -->
+<div id="nonBar" hidden>
+  <button data-a="1"><b>1</b>Full cross &mdash; both bars</button>
+  <button data-a="2"><b>2</b>No gold bar</button>
+  <button data-a="3"><b>3</b>No green bar</button>
+</div>
+
+<!-- ======================= LENS CALIBRATION BAR ======================= -->
+<div id="lensBar" hidden>
+  <div class="f"><span>barrel k1 <b id="bK1">0.22</b></span><input type="range" id="barK1" min="0" max="0.6" step="0.01" value="0.22"></div>
+  <div class="f"><span>barrel k2 <b id="bK2">0.10</b></span><input type="range" id="barK2" min="0" max="0.6" step="0.01" value="0.10"></div>
+  <button id="btnGridDone">Done</button>
+  <div class="f"><span>colour fringe <b id="bCh">0.003</b></span><input type="range" id="barCh" min="0" max="0.012" step="0.001" value="0.003"></div>
+  <div class="f"><span>lens centre <b id="bOff">0</b></span><input type="range" id="barOff" min="-60" max="60" step="2" value="0"></div>
+</div>

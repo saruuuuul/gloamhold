@@ -1,0 +1,51 @@
+name: Build and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: python3 build.py
+      - name: Check the bundle parses
+        run: |
+          node -e "
+          const fs=require('fs');
+          const s=fs.readFileSync('dist/index.html','utf8');
+          const i=s.lastIndexOf('<script>\n(function(){');
+          const j=s.indexOf('</script>', i);
+          if(i<0||j<0){ console.error('bundle not found'); process.exit(1); }
+          new Function(s.slice(i+8, j));
+          console.log('bundle parses, ' + (j-i) + ' bytes');
+          "
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
