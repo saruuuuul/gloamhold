@@ -76,6 +76,7 @@ function hurtPlayer(n, sx, sy){
 function hurtFoe(f,n){
   f.hp -= n; f.hurt = TUNING.combat.foeHurtFrames;
   sfx(f.hp<=0 ? 'foeDie' : 'hitFoe');
+  G.fx.push({ x:f.x, y:f.y, t:10, type:'spark', seed:Math.random()*6.28 });
   var a = Math.atan2(f.y-G.p.y, f.x-G.p.x), kb = TUNING.combat.foeKnockback;
   f.vx = Math.cos(a)*kb; f.vy = Math.sin(a)*kb;
   if(f.hp<=0){

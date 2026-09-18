@@ -27,7 +27,7 @@ var S = {
   checks:[],           // {t, answer}
   roomLog:[],          // {room, name, inAt, clearedAt, clean, hitsIn}
   stepsDown:0, stepsUp:0, ended:false, won:false,
-  knockdowns:0, sessionDone:false, starsGained:0
+  knockdowns:0, sessionDone:false, starsGained:0, awarded:false
 };
 function logContrast(){ S.trail.push({ t:S.elapsed, c:cfg.strong }); if(S.trail.length>900) S.trail.splice(0,400); }
 
@@ -202,7 +202,7 @@ function newGame(){
      shows up in the log like every other one */
   S.started = performance.now(); S.elapsed=0; S.rooms=0; S.cleanRooms=0; S.hits=0; S.kills=0;
   S.trail=[]; S.checks=[]; S.roomLog=[]; S.stepsDown=0; S.stepsUp=0; S.ended=false; S.won=false;
-  S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false;
+  S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false; S.awarded=false;
   roomState = {};
   enterRoom('1,2', null);
   logContrast();

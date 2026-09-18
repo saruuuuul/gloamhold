@@ -140,6 +140,12 @@ because a child who mashes the button would otherwise always "measure" whatever 
 scheduled round happened to be. The screen asks for one more go; the line underneath tells the
 grown-up what actually happened.
 
+Dying is not a dead end: the run ends on **GOOD TRY!**, stars are awarded anyway, and one big
+button starts the next one. A child who gets nothing for a bad run stops having bad runs by
+not playing. The numbers a grown-up wants moved to **This run in numbers** on the grown-up
+menu, because they were crowding the buttons off the bottom of the screen behind the lens
+inset — which is what made the end of a run feel like the controller had stopped working.
+
 Held upright, the app shows **turn the phone** instead of rendering. Orientation lock is
 refused more often than it is granted, and two tall slivers do not fuse into anything.
 

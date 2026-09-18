@@ -91,7 +91,14 @@ still looks fine, which is the worst kind of bug here.
    knockdown. Without the cap, a child who gets hit repeatedly has the stronger eye pushed
    back up each time, so the harder he finds it the less dichoptic load he receives — the
    exact opposite of the point.
-11. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
+11. **Anything the child must act on goes through `drawSimpleScreen()`.** One icon, one
+   line, one big button — and the button is anchored to the BOTTOM of the safe area and
+   drawn last, so no amount of content above it can push it off screen. The old end-of-run
+   screen built a seven-row stats table first and laid its buttons out below it; once the
+   lens inset took 13% off each edge there was nothing left on screen to put a cursor on,
+   which reads to a player as "the controller does not work here". Numbers for grown-ups go
+   on `SCREENS.report`, never on a screen a five-year-old lands on.
+12. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
    Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
    `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name')`, which
    is a no-op until `audioUnlock()` has run on a real gesture.
@@ -168,6 +175,9 @@ still looks fine, which is the worst kind of bug here.
   Gamepads have no events, so their first step *and* their repeat both come from the poll.
 - `show()` calls `closeMenu()` and `openMenu()` calls `hideAll()`. A flat panel and a stereo
   menu must never be live at once, or the UI loop keeps driving the hidden one's cursor.
+- **Death poofs and hit sparks draw INSIDE the foe alpha block.** They were outside it,
+  at full contrast to both eyes, which told the stronger eye exactly where an enemy it is not
+  allowed to see had just died. Anything spawned by a foe belongs to the foe layer.
 - **Portrait is refused, not rendered.** `renderScene()` draws `drawRotatePrompt()` and
   returns whenever `VH > VW`. Orientation lock is denied far more often than granted, and two
   tall slivers fuse into nothing. It is deliberately not stereo — there is nothing worth

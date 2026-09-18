@@ -274,6 +274,36 @@ function drawRotatePrompt(){
   ctx.restore();
 }
 
+/* ---------------- one-big-button screens ----------------
+   Everything the child ever has to act on uses this. The button is anchored
+   to the BOTTOM of the safe area and drawn last, so no amount of content
+   above it can push it off screen — which is exactly what the old stats-table
+   summary did once the lens inset took 13% off each edge, leaving a screen
+   with nothing on it to aim a cursor at. */
+function drawBigButton(vp, u, label, focused){
+  var w = Math.min(vp.w*0.78, u*62), h = u*13;
+  var x = vp.x + (vp.w - w)/2, y = vp.y + vp.h - h - u*8;
+  var pulse = 0.55 + 0.45*Math.abs(Math.sin(MENU.t*TUNING.menu.cursorPulse));
+  ctx.fillStyle = 'rgba(232,177,63,0.16)';
+  ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = focused ? pulse : 0.45;
+  ctx.strokeStyle = C.gold; ctx.lineWidth = Math.max(2, u*1.1);
+  ctx.strokeRect(x + ctx.lineWidth/2, y + ctx.lineWidth/2, w - ctx.lineWidth, h - ctx.lineWidth);
+  ctx.globalAlpha = 1;
+  drawIcon('play', x + u*7, y + h/2, u*3.4, C.gold);
+  mtext(label, x + w/2 + u*3, y + h/2, u*5.8, C.bone, 'center', 700);
+}
+function drawSimpleScreen(vp, u, o){
+  var cx = vp.x + vp.w/2;
+  mtext(o.title, cx, vp.y + u*9, u*8, o.titleCol || C.gold, 'center', 700, F_PIX);
+  if(o.deco) o.deco(cx, vp.y + vp.h*0.38, u);
+  else if(o.icon) drawIcon(o.icon, cx, vp.y + vp.h*0.38, u*11, o.iconCol || C.jade);
+  if(o.big) mtext(o.big, cx, vp.y + vp.h*0.60, u*7, C.jade, 'center', 700, F_PIX);
+  if(o.sub) mtext(o.sub, cx, vp.y + vp.h*0.69, u*3.2, '#8e8a7e', 'center', 400, F_MONO);
+  drawBigButton(vp, u, o.button, true);
+  drawMenuFoot({ hint: o.foot }, vp, u);
+}
+
 /* ---------------- the per-eye entry point ---------------- */
 function drawMenuEye(eye){
   var vp0 = viewportFor(eye), vp = menuSafe(vp0), u = Math.min(vp.w, vp.h)/100;
@@ -347,6 +377,7 @@ SCREENS.adult = {
       { k:'seg', icon:'sound', label:'Spoken prompts', opts:[['mn','Mongolian'],['en','English'],['off','Off']],
         get:function(){ return cfg.speakLang; }, set:function(v){ cfg.speakLang = v; if(v!=='off') say('ready'); } },
       { k:'act', icon:'info', label:'Speech on this device', run:function(){ menuSay('speech: ' + speechStatus()); } },
+      { k:'act', icon:'flag', label:'This run in numbers', run:function(){ openMenu('report'); } },
       { k:'act', icon:'info', label:'What the easy setup measured', run:function(){ openMenu('measured'); } },
       { k:'act', icon:'flat', label:'Advanced tuning (flat panel)', run:function(){ openDevStereo('adult'); } },
       { k:'act', icon:'back', label:'Back', run:function(){ menuCancel(); } }
@@ -436,27 +467,49 @@ SCREENS.pause = {
   cancel: function(){ resumeRun(); }
 };
 
+/* One result, one button. The numbers a grown-up wants live on SCREENS.report;
+   putting them here meant a child met a seven-row table on the worst screen in
+   the game, and behind the lens inset the buttons fell off the bottom edge. */
 SCREENS.summary = {
   title: 'RUN OVER',
+  onOpen: function(){ awardSession(); say(S.won ? 'ready' : 'again'); },
+  nav: function(){},
+  confirm: function(){ sfx('uiOk'); S.ended = true; startRun(); },
+  cancel: function(){ closeMenu(); openMenu('title'); },
   custom: function(eye, vp, u){
-    var y = vp.y + u*7;
-    mtext(S.won ? 'THE WARDEN FALLS' : 'YOU FELL', vp.x + vp.w/2, y, u*6.5, S.won ? C.gold : C.blood, 'center', 700, F_PIX);
-    y += u*8;
-    y = drawStatBlock(vp, u, y) + u*2;
-    var items = menuItems(), i, rowH = u*TUNING.menu.rowHeight;
-    for(i=0;i<items.length;i++){
-      drawMenuRow(items[i], vp.x + u*2, y, vp.w - u*4, rowH, u, i === MENU.idx);
-      y += rowH + u*TUNING.menu.rowGap;
-    }
-    drawMenuFoot({ hint:'A pick · B title' }, vp, u);
-  },
-  items: function(){
-    return [
-      { k:'act', icon:'play', label:'Play again', run:function(){ S.ended = true; startRun(); } },
-      { k:'act', icon:'back', label:'Back to the title', run:function(){ closeMenu(); openMenu('title'); } }
-    ];
-  },
-  cancel: function(){ closeMenu(); openMenu('title'); }
+    drawSimpleScreen(vp, u, {
+      title: S.won ? 'YOU WIN!' : 'GOOD TRY!',
+      titleCol: S.won ? C.gold : C.jade,
+      deco: function(cx, cy, uu){
+        var i;
+        for(i=0;i<5;i++){
+          var a = MENU.t*0.028 + i*1.257, rr = uu*19 + Math.sin(MENU.t*0.05 + i)*uu*2;
+          ctx.globalAlpha = 0.45 + 0.55*Math.abs(Math.sin(MENU.t*0.04 + i));
+          drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.62, uu*2.4, C.gold);
+          ctx.globalAlpha = 1;
+        }
+        drawIcon(S.won ? 'key' : 'sword', cx, cy, uu*10, S.won ? C.gold : C.jade);
+      },
+      big: '+' + S.starsGained + ' stars',
+      sub: PROG.stars + ' stars  ·  ' + PROG.streak + ' day streak',
+      button: 'PLAY AGAIN',
+      foot: 'A play again · B title'
+    });
+  }
+};
+
+/* Where the seven rows went: a grown-up screen, not the end of a child's run. */
+SCREENS.report = {
+  title: 'THIS RUN',
+  nav: function(){},
+  confirm: function(){ menuCancel(); },
+  custom: function(eye, vp, u){
+    mtext('THIS RUN', vp.x + vp.w/2, vp.y + u*8, u*7, C.gold, 'center', 700, F_PIX);
+    drawStatBlock(vp, u, vp.y + u*18);
+    mtext(PROG.stars + ' stars · ' + PROG.sessions + ' sessions · ' + PROG.streak + ' day streak',
+          vp.x + vp.w/2, vp.y + vp.h - u*12, u*3, '#6a718c', 'center', 400, F_MONO);
+    drawMenuFoot({ hint:'B back' }, vp, u);
+  }
 };
 
 /* ---------------- lens grid, in stereo ---------------- */
@@ -501,15 +554,13 @@ SCREENS.kidIntro = {
   title: 'READY?',
   onOpen: function(){ say('goggles'); },
   custom: function(eye, vp, u){
-    var cx = vp.x + vp.w/2, cy = vp.y + vp.h*0.42;
-    mtext('READY?', cx, vp.y + u*9, u*9, C.gold, 'center', 700, F_PIX);
-    drawIcon('goggles', cx, cy, u*14, C.jade);
-    var pulse = 0.6 + 0.4*Math.abs(Math.sin(MENU.t*0.07));
-    ctx.globalAlpha = pulse;
-    mtext('Put the goggles on!', cx, cy + u*20, u*5.5, C.bone, 'center', 600);
-    ctx.globalAlpha = 1;
-    mtext('then press the big button', cx, cy + u*27, u*3.6, '#8e8a7e', 'center', 400, F_MONO);
-    drawMenuFoot({ hint:'A go · B back' }, vp, u);
+    drawSimpleScreen(vp, u, {
+      title: 'READY?',
+      icon: 'goggles',
+      big: 'GOGGLES ON',
+      button: 'GO',
+      foot: 'A go · B back'
+    });
   },
   nav: function(){},
   confirm: function(){ sfx('uiOk'); openMenu('kidHunt'); }
@@ -724,18 +775,22 @@ SCREENS.kidDone = {
   nav: function(){},
   confirm: function(){ sfx('uiOk'); closeMenu(); startRun(); },
   custom: function(eye, vp, u){
-    var cx = vp.x + vp.w/2, cy = vp.y + vp.h*0.40, i;
-    mtext('ALL SET!', cx, vp.y + u*9, u*10, C.gold, 'center', 700, F_PIX);
-    for(i=0;i<5;i++){
-      var a = MENU.t*0.03 + i*1.257, rr = u*20 + Math.sin(MENU.t*0.05 + i)*u*2;
-      ctx.globalAlpha = 0.5 + 0.5*Math.abs(Math.sin(MENU.t*0.04 + i));
-      drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.7, u*3, C.gold);
-      ctx.globalAlpha = 1;
-    }
-    drawIcon('sword', cx, cy, u*11, C.jade);
-    mtext('press the big button to play', cx, vp.y + vp.h - u*16, u*4.5, C.bone, 'center', 600);
-    mtext('grown-up: strong eye starts at ' + pct(cfg.strong), cx, vp.y + vp.h - u*10, u*3, '#6a718c', 'center', 400, F_MONO);
-    drawMenuFoot({ hint:'A play' }, vp, u);
+    drawSimpleScreen(vp, u, {
+      title: 'ALL SET!',
+      deco: function(cx, cy, uu){
+        var i;
+        for(i=0;i<5;i++){
+          var a = MENU.t*0.03 + i*1.257, rr = uu*18 + Math.sin(MENU.t*0.05 + i)*uu*2;
+          ctx.globalAlpha = 0.5 + 0.5*Math.abs(Math.sin(MENU.t*0.04 + i));
+          drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.7, uu*2.6, C.gold);
+          ctx.globalAlpha = 1;
+        }
+        drawIcon('sword', cx, cy, uu*10, C.jade);
+      },
+      sub: 'grown-up: strong eye starts at ' + pct(cfg.strong),
+      button: 'PLAY',
+      foot: 'A play'
+    });
   }
 };
 
@@ -811,12 +866,19 @@ function dayKey(d){
   d = d || new Date();
   return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
 }
+/* Idempotent per run: a run can end by reaching the session goal OR by the
+   player falling, and both routes award. Dying must still be worth stars —
+   a five-year-old who gets nothing for a bad run stops having bad runs by
+   not playing. */
 function awardSession(){
+  if(S.awarded) return S.starsGained;
+  S.awarded = true;
   var SS = TUNING.session, gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom, lo = 1;
   S.trail.forEach(function(p){ lo = Math.min(lo, p.c); });
   if(S.trail.length && lo < PROG.best - 0.001){ gained += SS.starsImproved; PROG.best = lo; }
   PROG.stars += gained;
   PROG.sessions++;
+  S.starsGained = gained;
   var d = dayKey();
   if(PROG.lastDay !== d){
     var y = dayKey(new Date(Date.now() - 86400000));
@@ -841,21 +903,23 @@ SCREENS.sessionDone = {
   confirm: function(){ sfx('uiOk'); closeMenu(); openMenu('title'); },
   cancel: function(){ closeMenu(); openMenu('title'); },
   custom: function(eye, vp, u){
-    var cx = vp.x + vp.w/2, cy = vp.y + vp.h*0.36, i;
-    mtext('WELL PLAYED', cx, vp.y + u*8, u*8, C.gold, 'center', 700, F_PIX);
-    for(i=0;i<6;i++){
-      var a = MENU.t*0.025 + i*1.047, rr = u*22 + Math.sin(MENU.t*0.05 + i)*u*2;
-      ctx.globalAlpha = 0.45 + 0.55*Math.abs(Math.sin(MENU.t*0.035 + i));
-      drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.62, u*2.6, C.gold);
-      ctx.globalAlpha = 1;
-    }
-    drawIcon('key', cx, cy, u*9, C.gold);
-    mtext('+' + S.starsGained + ' stars', cx, vp.y + vp.h*0.63, u*7, C.jade, 'center', 700, F_PIX);
-    drawStarRow(cx, vp.y + vp.h*0.73, S.starsGained, u, 8);
-    mtext(PROG.stars + ' stars  \u00b7  ' + PROG.streak + ' day streak', cx, vp.y + vp.h*0.82, u*3.4, '#8e8a7e', 'center', 400, F_MONO);
-    mtext(fmtTime(S.elapsed) + '  \u00b7  ' + S.rooms + ' rooms  \u00b7  strong eye ' + pct(cfg.strong),
-          cx, vp.y + vp.h - u*11, u*2.9, '#6a718c', 'center', 400, F_MONO);
-    drawMenuFoot({ hint:'A finish' }, vp, u);
+    drawSimpleScreen(vp, u, {
+      title: 'WELL PLAYED',
+      deco: function(cx, cy, uu){
+        var i;
+        for(i=0;i<6;i++){
+          var a = MENU.t*0.025 + i*1.047, rr = uu*19 + Math.sin(MENU.t*0.05 + i)*uu*2;
+          ctx.globalAlpha = 0.45 + 0.55*Math.abs(Math.sin(MENU.t*0.035 + i));
+          drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.62, uu*2.4, C.gold);
+          ctx.globalAlpha = 1;
+        }
+        drawIcon('key', cx, cy, uu*10, C.gold);
+      },
+      big: '+' + S.starsGained + ' stars',
+      sub: PROG.stars + ' stars  \u00b7  ' + PROG.streak + ' day streak',
+      button: 'DONE',
+      foot: 'A finish'
+    });
   }
 };
 
@@ -892,14 +956,15 @@ SCREENS.kidRetry = {
   confirm: function(){ sfx('uiOk'); openMenu('kidHunt', true); },
   cancel: function(){ closeMenu(); openMenu('title'); },
   custom: function(eye, vp, u){
-    var cx = vp.x + vp.w/2;
-    mtext('ONE MORE GO', cx, vp.y + u*9, u*7, C.gold, 'center', 700, F_PIX);
-    drawIcon('star', cx, vp.y + vp.h*0.40, u*11, '#4a5166');
-    mtext('let us try that again', cx, vp.y + vp.h*0.60, u*5, C.bone, 'center', 600);
-    var why = HUNT && HUNT.fa >= TUNING.kid.falseAlarmLimit
-      ? 'Grown-up: ' + HUNT.fa + ' presses on rounds where nothing was shown, so this run measured nothing and the contrast was left alone.'
-      : 'Grown-up: nothing was caught, so there is no threshold to read. The contrast was left alone.';
-    mparagraph(why, cx, vp.y + vp.h - u*22, vp.w - u*12, u*3, '#6a718c', 1.5, 'center');
-    drawMenuFoot({ hint:'A again \u00b7 B stop' }, vp, u);
+    drawSimpleScreen(vp, u, {
+      title: 'ONE MORE GO',
+      icon: 'star',
+      iconCol: '#4a5166',
+      sub: (HUNT && HUNT.fa >= TUNING.kid.falseAlarmLimit)
+        ? 'grown-up: ' + HUNT.fa + ' presses on empty rounds, contrast left alone'
+        : 'grown-up: nothing caught, contrast left alone',
+      button: 'AGAIN',
+      foot: 'A again \u00b7 B stop'
+    });
   }
 };
