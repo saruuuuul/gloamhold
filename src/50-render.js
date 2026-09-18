@@ -13,6 +13,11 @@ function render(){ renderScene(); present(); }
 function renderScene(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.fillStyle = C.void; ctx.fillRect(0,0,VW,VH);
+  /* A viewer is a landscape device. Held upright the two eye viewports become
+     tall slivers that fuse into nothing, and orientation lock is refused far
+     more often than it is granted — so ask for the rotation instead of
+     rendering something unusable. */
+  if(VH > VW){ drawRotatePrompt(); return; }
   if(nonius.on){ drawEyeNonius('left'); drawEyeNonius('right'); }
   else if(MENU.id){ drawMenuEye('left'); drawMenuEye('right'); }
   else if(G){ drawEye('left'); drawEye('right'); }

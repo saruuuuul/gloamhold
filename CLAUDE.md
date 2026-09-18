@@ -79,7 +79,19 @@ still looks fine, which is the worst kind of bug here.
    for a grown-up at a desk and the home of the generated tuning panel; reaching for them for
    anything else means the player has to take the viewer off, which is exactly what invalidates
    an alignment check.
-9. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
+9. **A measurement a masher can pass is not a measurement.** `kidHunt` interleaves
+   exactly `TUNING.kid.catchTrials` rounds where nothing is presented. Press on
+   `falseAlarmLimit` of them and the run is discarded — `cfg.strong` is left alone and
+   `SCREENS.kidRetry` explains why. This started as a per-round *probability*, which let a
+   short run arm one blank and wave a button-masher straight through; it is a count now, and
+   `tests/smoke.mjs` drives both a masher and an honest player to prove it still separates
+   them. Do not soften it back into a rate.
+10. **Child mode must never make struggling reduce the training.** `cfg.kidMode` caps
+   contrast step-ups at `TUNING.session.stepUpsPerRoom` per room and replaces death with a
+   knockdown. Without the cap, a child who gets hit repeatedly has the stronger eye pushed
+   back up each time, so the harder he finds it the less dichoptic load he receives — the
+   exact opposite of the point.
+11. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
    Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
    `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name')`, which
    is a no-op until `audioUnlock()` has run on a real gesture.
@@ -92,10 +104,10 @@ still looks fine, which is the worst kind of bug here.
 | `src/10-panels.html` | **Flat fallback** panels + the generated tuning panel. Not what you see in the viewer |
 | `src/20-core.js` | `cfg`, session `S`, canvas + WebGL lens stage, `alphaFor`, dungeon tables, room building |
 | `src/30-tuning.js` | `TUNING` and its defaults, load/save/walk helpers |
-| `src/35-audio.js` | Synthesised sound: `audioUnlock`, `tone`/`hiss` primitives, the `SFX` catalogue, `sfx(name)` |
+| `src/35-audio.js` | Synthesised sound: `audioUnlock`, `tone`/`hiss`, the `SFX` catalogue, `sfx(name)`; plus `SPEECH` / `say(key)` spoken prompts |
 | `src/40-entities.js` | Enemy behaviour, collision, damage, the adaptive staircase, doors |
 | `src/50-render.js` | Palette, per-eye render, sprites, calibration grid |
-| `src/55-menu.js` | Stereo menus: engine, `SCREENS`, icons, the child setup wizard |
+| `src/55-menu.js` | Stereo menus: engine, `SCREENS`, icons, the child setup wizard, `PROG` stars/streak, the rotate prompt |
 | `src/60-hud.js` | HUD, nonius check, keyboard / gamepad / touch / tilt input, menu input polling |
 | `src/70-ui.js` | Flow control (`startRun`/`resumeRun`/`doPause`), flat panel wiring, wake lock, game loop, `uiLoop`, boot |
 | `src/80-dev.js` | Auto-generated tuning panel, session telemetry, `window.GH` handle |
@@ -114,6 +126,16 @@ still looks fine, which is the worst kind of bug here.
   as a stereo screen (`SCREENS.nonius`) so it can be answered without lifting the viewer —
   lifting it is what makes the answer meaningless. `noniusAnswer()` stores its verdict in
   `noniusMsg` for whichever presentation asked.
+- **Session shape.** In child mode a run ends on a planned note: `checkSessionGoal()` in
+  the loop warns at `TUNING.session.warnMinutes` and calls `finishSession()` at `minutes`,
+  which awards stars and opens `SCREENS.sessionDone`. `PROG` (stars, day streak, sessions,
+  best contrast) is the only state that outlives a run; it lives in `gloamhold.progress`.
+  The market alternatives this replaces failed on boredom rather than on mechanism, so the
+  reward loop is load-bearing, not decoration.
+- **Spoken prompts.** The player cannot read. `say(key)` speaks from the `SPEECH` table via
+  the browser's own synthesiser — still no assets, no network. If the device has no voice for
+  `cfg.speakLang` it stays **silent** rather than reading Cyrillic in an English voice;
+  `speechStatus()` surfaces that on the grown-up screen so the failure is visible.
 - **Child wizard.** `SCREENS.kidIntro` → `kidHunt` → `kidSticks` → `kidDone`. `kidHunt` is a
   descending staircase: a target is presented to the **stronger eye only** at `HUNT.c`, and
   the faintest catch divided by `huntStepFactor` (times `safetyBackoff`) becomes `cfg.strong`.
@@ -146,6 +168,13 @@ still looks fine, which is the worst kind of bug here.
   Gamepads have no events, so their first step *and* their repeat both come from the poll.
 - `show()` calls `closeMenu()` and `openMenu()` calls `hideAll()`. A flat panel and a stereo
   menu must never be live at once, or the UI loop keeps driving the hidden one's cursor.
+- **Portrait is refused, not rendered.** `renderScene()` draws `drawRotatePrompt()` and
+  returns whenever `VH > VW`. Orientation lock is denied far more often than granted, and two
+  tall slivers fuse into nothing. It is deliberately not stereo — there is nothing worth
+  fusing until the phone is turned.
+- Everything time-based hangs off `requestAnimationFrame`, so a backgrounded or unpainted
+  page freezes the session clock. That is correct (time should not accrue in a pocket) but it
+  makes headless testing of the session timer unreliable unless something forces a paint.
 - The menus animate, so there is a permanent `requestAnimationFrame` (`uiLoop`) that idles
   out in one branch while the dungeon loop owns the frame. Do not "optimise" it away — it is
   also the only thing polling the gamepad in menus.

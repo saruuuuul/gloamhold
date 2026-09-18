@@ -68,27 +68,87 @@ const sfxErrors = await pg.evaluate(() => {
 if (sfxErrors.errs.length) fails.push('sfx threw: ' + sfxErrors.errs.join(', '));
 if (sfxErrors.effects < 20) fails.push(`only ${sfxErrors.effects} sound effects defined`);
 
-/* a menu must reach both eyes identically — that is the fusion lock. Compare
-   the two halves with the lens off, where they should be pixel-identical. */
-const menuDiff = await pg.evaluate(() => {
-  GH.cfg.lens = 'off'; GH.open('title'); GH.redraw();
-  const c = document.getElementById('view');
-  const t = document.createElement('canvas');
-  t.width = c.width; t.height = c.height;
-  t.getContext('2d').drawImage(c, 0, 0);
-  const d = t.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-  const half = c.width >> 1, m = 6;   // skip the seam and the outer edge
-  let diff = 0, total = 0;
-  for (let y = m; y < c.height - m; y++) {
-    for (let x = m; x < half - m; x++) {
-      const i = (y * c.width + x) * 4, j = (y * c.width + x + half) * 4;
-      total++;
-      if (Math.abs(d[i] - d[j]) > 8) diff++;
+/* Every menu must reach both eyes identically — that is the fusion lock.
+   The two exceptions are named here rather than left to slip under a
+   threshold: they present different bars to each eye on purpose, because
+   that IS the measurement. */
+const EYE_ASYMMETRIC = ['nonius', 'kidSticks'];
+const menuDiff = await pg.evaluate((skip) => {
+  const measure = (id) => {
+    GH.cfg.lens = 'off'; GH.open(id); GH.redraw();
+    const c = document.getElementById('view');
+    const t = document.createElement('canvas');
+    t.width = c.width; t.height = c.height;
+    t.getContext('2d').drawImage(c, 0, 0);
+    const d = t.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const half = c.width >> 1, m = 6;   // skip the seam and the outer edge
+    let diff = 0, total = 0;
+    for (let y = m; y < c.height - m; y++) {
+      for (let x = m; x < half - m; x++) {
+        const i = (y * c.width + x) * 4, j = (y * c.width + x + half) * 4;
+        total++;
+        if (Math.abs(d[i] - d[j]) > 8) diff++;
+      }
     }
-  }
-  return { pct: (100 * diff) / Math.max(total, 1) };
+    return (100 * diff) / Math.max(total, 1);
+  };
+  const out = {};
+  for (const id of GH.screens()) if (skip.indexOf(id) < 0) out[id] = measure(id);
+  const asym = {};
+  for (const id of skip) asym[id] = measure(id);
+  return { out, asym, checked: Object.keys(out).length };
+}, EYE_ASYMMETRIC);
+for (const [id, pct] of Object.entries(menuDiff.out)) {
+  if (pct > 1) fails.push(`screen "${id}" differs between the eyes by ${pct.toFixed(2)}% — menu chrome must be binocular`);
+}
+/* and the measurement screens must actually still differ, or the nonius test
+   has quietly stopped testing anything */
+for (const [id, pct] of Object.entries(menuDiff.asym)) {
+  if (pct < 0.05) fails.push(`screen "${id}" is identical in both eyes — its per-eye bars have stopped being drawn`);
+}
+
+/* child mode changes the shape of the game, not just the numbers */
+const child = await pg.evaluate(async () => {
+  const s = (ms) => new Promise((r) => setTimeout(r, ms));
+  GH.cfg.kidMode = true; GH.play(); await s(400);
+  const base = GH.TUNING.player.maxHp, extra = GH.TUNING.session.extraHearts * 2;
+  const foe = GH.game.foes[0];
+  const out = { maxhp: GH.game.p.maxhp, want: base + extra,
+                foeSpd: foe ? foe.spd : null,
+                wantSpd: foe ? GH.TUNING[foe.type].speed * GH.TUNING.session.foeSpeedScale : null };
+  GH.game.p.hp = 1;
+  GH.game.p.inv = 0;
+  GH.sfx && null;
+  return out;
 });
-if (menuDiff.pct > 1) fails.push(`menu differs between the eyes by ${menuDiff.pct.toFixed(2)}% of pixels — menu chrome must be binocular`);
+if (child.maxhp !== child.want) fails.push(`child mode gave ${child.maxhp} hp, expected ${child.want}`);
+if (child.foeSpd != null && Math.abs(child.foeSpd - child.wantSpd) > 1e-6)
+  fails.push(`child mode foe speed ${child.foeSpd}, expected ${child.wantSpd}`);
+
+/* catch trials have to separate a real threshold from a mashed button */
+const trials = await pg.evaluate(async () => {
+  const s = (ms) => new Promise((r) => setTimeout(r, ms));
+  const run = async (honest) => {
+    GH.cfg.strong = 0.4; GH.cfg.kidSet = false; GH.open('kidHunt'); await s(120);
+    for (let i = 0; i < 60 && GH.menu.id === 'kidHunt'; i++) {
+      GH.hunt.shown = true; GH.hunt.hold = 9999;
+      if (!honest || !GH.hunt.blank) GH.confirm(); else GH.hunt.hold = 1;
+      await s(25);
+    }
+    return { verdict: GH.menu.id, fa: GH.hunt.fa, blanks: GH.hunt.blanks,
+             unreliable: !!GH.hunt.unreliable, strong: GH.cfg.strong };
+  };
+  const masher = await run(false);
+  const honest = await run(true);
+  return { masher, honest };
+});
+if (trials.masher.verdict !== 'kidRetry')
+  fails.push(`a mashed wizard run was accepted (ended on "${trials.masher.verdict}", ${trials.masher.fa} false alarms) — catch trials are not discriminating`);
+if (Math.abs(trials.masher.strong - 0.4) > 1e-6)
+  fails.push('a mashed wizard run still wrote a contrast into cfg.strong');
+if (trials.honest.verdict !== 'kidSticks')
+  fails.push(`an honest wizard run was rejected (ended on "${trials.honest.verdict}")`);
+if (trials.honest.fa !== 0) fails.push(`honest run recorded ${trials.honest.fa} false alarms`);
 
 /* the child wizard: a descending staircase that ends on a usable contrast */
 const kid = await pg.evaluate(async () => {
@@ -157,4 +217,4 @@ if (!rec.build) fails.push('session log has no build stamp');
 
 await browser.close();
 if (fails.length) { fails.forEach((f) => console.log('FAIL  ' + f)); console.log(`\n${fails.length} failure(s)`); process.exit(1); }
-console.log(`ok — booted clean, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, menus binocular to ${menuDiff.pct.toFixed(2)}%, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);
+console.log(`ok — booted clean, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);

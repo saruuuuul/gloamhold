@@ -258,6 +258,22 @@ function drawMenuFoot(s, vp, u){
   mtext(hint, vp.x + vp.w/2, fy, u*TUNING.menu.hintSize, '#6a718c', 'center', 400, F_MONO);
 }
 
+/* Shown in place of everything while the device is upright. Not stereo on
+   purpose: there is nothing useful to fuse until the phone is turned. */
+function drawRotatePrompt(){
+  var u = Math.min(VW, VH)/100, cx = VW/2, cy = VH/2;
+  ctx.save();
+  ctx.fillStyle = C.void; ctx.fillRect(0, 0, VW, VH);
+  ctx.strokeStyle = C.gold; ctx.lineWidth = Math.max(2, u*1.2);
+  ctx.strokeRect(cx - u*22, cy - u*13, u*44, u*26);
+  ctx.strokeStyle = '#3c4d78';
+  ctx.strokeRect(cx - u*13, cy - u*22, u*26, u*44);
+  drawIcon('back', cx, cy, u*7, C.gold);
+  mtext('TURN THE PHONE', cx, cy + u*32, u*6, C.gold, 'center', 700, F_PIX);
+  mtext('sideways, then into the viewer', cx, cy + u*39, u*3.4, '#8e8a7e', 'center', 400, F_MONO);
+  ctx.restore();
+}
+
 /* ---------------- the per-eye entry point ---------------- */
 function drawMenuEye(eye){
   var vp0 = viewportFor(eye), vp = menuSafe(vp0), u = Math.min(vp.w, vp.h)/100;
@@ -286,7 +302,8 @@ function pct(v){ return Math.round(v*100) + '%'; }
 
 SCREENS.title = {
   title: 'GLOAMHOLD',
-  sub: 'dichoptic dungeon · side-by-side stereo',
+  get sub(){ return PROG.stars ? (PROG.stars + ' stars · ' + PROG.streak + ' day streak')
+                               : 'dichoptic dungeon · side-by-side stereo'; },
   items: function(){
     return [
       { k:'act', icon:'play',    label:'Play',                run: function(){ startRun(); } },
@@ -295,6 +312,7 @@ SCREENS.title = {
       { k:'act', icon:'cross',   label:'Alignment check',     run: function(){ startNonius(); } },
       { k:'act', icon:'grid',    label:'Lens grid',           run: function(){ openMenu('lensgrid'); } },
       { k:'tog', icon: cfg.mute ? 'mute' : 'sound', label:'Sound', get:function(){ return !cfg.mute; }, set:function(v){ cfg.mute = !v; if(v){ audioUnlock(); sfx('uiOk'); } } },
+      { k:'act', icon:'star',    label:'My stars', run: function(){ openMenu('stars'); } },
       { k:'act', icon:'flat',    label:'Flat menus (no viewer)', run: function(){ goFlat(); } },
       { k:'act', icon:'info',    label:'Not a medical device', run: function(){ openMenu('safety'); } }
     ];
@@ -321,6 +339,14 @@ SCREENS.adult = {
         get:function(){ return cfg.lens; }, set:function(v){ cfg.lens = v; if(LENS_PRESETS[v]){ cfg.k1=LENS_PRESETS[v].k1; cfg.k2=LENS_PRESETS[v].k2; cfg.chroma=LENS_PRESETS[v].chroma; } paintSeg(); } },
       { k:'act', icon:'grid', label:'Calibrate against a grid', run:function(){ openMenu('lensgrid'); } },
       { k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } },
+      { k:'tog', icon:'kid', label:'Child mode', get:function(){ return cfg.kidMode; }, set:function(v){ cfg.kidMode = v; } },
+      { k:'num', icon:'flag', label:'Session length', min:0, max:45, step:1,
+        get:function(){ return TUNING.session.minutes; },
+        set:function(v){ TUNING.session.minutes = v; saveTuning(); },
+        fmt:function(v){ return v ? v + ' min' : 'no limit'; } },
+      { k:'seg', icon:'sound', label:'Spoken prompts', opts:[['mn','Mongolian'],['en','English'],['off','Off']],
+        get:function(){ return cfg.speakLang; }, set:function(v){ cfg.speakLang = v; if(v!=='off') say('ready'); } },
+      { k:'act', icon:'info', label:'Speech on this device', run:function(){ menuSay('speech: ' + speechStatus()); } },
       { k:'act', icon:'info', label:'What the easy setup measured', run:function(){ openMenu('measured'); } },
       { k:'act', icon:'flat', label:'Advanced tuning (flat panel)', run:function(){ openDevStereo('adult'); } },
       { k:'act', icon:'back', label:'Back', run:function(){ menuCancel(); } }
@@ -473,6 +499,7 @@ var HUNT = null;
 
 SCREENS.kidIntro = {
   title: 'READY?',
+  onOpen: function(){ say('goggles'); },
   custom: function(eye, vp, u){
     var cx = vp.x + vp.w/2, cy = vp.y + vp.h*0.42;
     mtext('READY?', cx, vp.y + u*9, u*9, C.gold, 'center', 700, F_PIX);
@@ -490,13 +517,26 @@ SCREENS.kidIntro = {
 
 function huntStart(){
   var K = TUNING.kid;
-  HUNT = { round:0, c:K.huntStartContrast, best:0, shown:false, hold:0, wait:0,
-           misses:0, hits:0, fb:0, fbGood:false, pos:{x:0.5,y:0.45}, done:false };
+  HUNT = { round:0, c:K.huntStartContrast, best:0, shown:false, blank:false, hold:0, wait:0,
+           misses:0, hits:0, fa:0, blanks:0, fb:0, fbGood:false,
+           pos:{x:0.5,y:0.45}, done:false, unreliable:false };
   huntArm();
+  say('hunt');
 }
 function huntArm(){
   var K = TUNING.kid;
   HUNT.shown = false;
+  /* A catch trial opens the same window but presents nothing. Without these
+     the staircase cannot tell a threshold from a child mashing the button:
+     a masher "catches" every round and always lands on whatever the last
+     scheduled contrast happened to be.
+     Exactly K.catchTrials of them are interleaved, spread by weighting
+     against the real rounds still to come, so the run always ends with the
+     full set armed however the dice fall. */
+  var realLeft  = Math.max(0, K.huntRounds - HUNT.round);
+  var blankLeft = Math.max(0, K.catchTrials - HUNT.blanks);
+  HUNT.blank = blankLeft > 0 && (realLeft === 0 || Math.random() < blankLeft / (blankLeft + realLeft));
+  if(HUNT.blank) HUNT.blanks++;
   HUNT.wait = K.waitMinFrames + ((Math.random()*K.waitVarFrames)|0);
   HUNT.pos = { x: 0.25 + Math.random()*0.5, y: 0.3 + Math.random()*0.35 };
 }
@@ -505,17 +545,28 @@ function huntTick(){
   if(!HUNT || HUNT.done) return;
   if(HUNT.fb > 0) HUNT.fb--;
   if(!HUNT.shown){
-    if(--HUNT.wait <= 0){ HUNT.shown = true; HUNT.hold = K.targetHoldFrames; sfx('target'); }
+    if(--HUNT.wait <= 0){
+      HUNT.shown = true; HUNT.hold = K.targetHoldFrames;
+      if(!HUNT.blank) sfx('target');
+    }
     return;
   }
-  if(--HUNT.hold <= 0) huntMiss();
+  if(--HUNT.hold <= 0){
+    if(HUNT.blank){ huntArm(); return; }   /* letting a blank pass is the right answer */
+    huntMiss();
+  }
+}
+function huntFalseAlarm(){
+  var K = TUNING.kid;
+  HUNT.fa++; HUNT.fb = K.feedbackFrames; HUNT.fbGood = false; sfx('oops');
 }
 function huntPress(){
   var K = TUNING.kid;
   if(!HUNT || HUNT.done) return;
-  if(!HUNT.shown){ HUNT.fb = K.feedbackFrames; HUNT.fbGood = false; sfx('oops'); return; }
+  if(!HUNT.shown){ huntFalseAlarm(); return; }          /* pressed before anything opened */
+  if(HUNT.blank){ huntFalseAlarm(); huntArm(); return; } /* pressed at nothing */
   HUNT.hits++; HUNT.best = HUNT.c;
-  HUNT.fb = K.feedbackFrames; HUNT.fbGood = true; sfx('star');
+  HUNT.fb = K.feedbackFrames; HUNT.fbGood = true; sfx('star'); say('good');
   HUNT.round++;
   if(HUNT.round >= K.huntRounds || HUNT.c <= K.huntFloor + 1e-6){ huntFinish(); return; }
   HUNT.c = Math.max(K.huntFloor, HUNT.c * K.huntStepFactor);
@@ -531,9 +582,18 @@ function huntMiss(){
 function huntFinish(){
   var K = TUNING.kid, th = TUNING.therapy, q = th.quantise;
   HUNT.done = true;
+  /* Too many presses at nothing, or nothing caught at all, and there is no
+     threshold in here — only a number that would look like one. Report that
+     rather than writing it into cfg.strong. */
+  if(HUNT.fa >= K.falseAlarmLimit || HUNT.best <= 0){
+    HUNT.unreliable = true;
+    sfx('oops');
+    openMenu('kidRetry', true);
+    return;
+  }
   /* back off one step from the faintest catch — a threshold you only just
      reached in a game is not one to start a session at */
-  var base = HUNT.best > 0 ? HUNT.best / (K.huntStepFactor * K.safetyBackoff) : cfg.strong;
+  var base = HUNT.best / (K.huntStepFactor * K.safetyBackoff);
   var v = Math.max(th.minContrast, Math.min(1, Math.round(base/q)*q));
   cfg.strong = v; cfg.kidSet = true;
   saveCfg(); syncSliders(); logContrast();
@@ -584,7 +644,7 @@ function drawKidTarget(eye, vp, u){
       ctx.globalAlpha = 1;
     }
   }
-  if(!HUNT.shown || eye !== strongEye) return;
+  if(!HUNT.shown || HUNT.blank || eye !== strongEye) return;
   ctx.globalAlpha = HUNT.c;
   drawButterfly(fx, fy, u*3.2);
   ctx.globalAlpha = 1;
@@ -603,7 +663,7 @@ function drawButterfly(x, y, s){
 
 SCREENS.kidSticks = {
   title: 'STICKS',
-  onOpen: function(){ nonius.on = false; MENU.idx = 0; },
+  onOpen: function(){ nonius.on = false; MENU.idx = 0; say('sticks'); },
   tick: function(){},
   nav: function(dx){
     if(!dx) return;
@@ -660,7 +720,7 @@ function drawKidNonius(eye, cx, cy, u){
 
 SCREENS.kidDone = {
   title: 'ALL SET',
-  onOpen: function(){ sfx('fanfare'); },
+  onOpen: function(){ sfx('fanfare'); say('ready'); },
   nav: function(){},
   confirm: function(){ sfx('uiOk'); closeMenu(); startRun(); },
   custom: function(eye, vp, u){
@@ -727,4 +787,119 @@ SCREENS.noniusResult = {
   nav: function(){},
   confirm: function(){ sfx('uiOk'); closeMenu(); startRun(); },
   cancel: function(){ closeMenu(); openMenu('title'); }
+};
+
+/* ============================================================
+   THE REWARD LOOP
+   The commercial dichoptic games this replaces failed on boredom,
+   not on mechanism, so what keeps a child coming back tomorrow is
+   load-bearing. Stars and a day streak persist across sessions;
+   PROG is the only thing in this app that outlives a run.
+   ============================================================ */
+var PROG = { stars:0, sessions:0, streak:0, lastDay:'', best:1 };
+
+function loadProg(){
+  try{
+    var raw = localStorage.getItem('gloamhold.progress');
+    if(!raw) return;
+    var o = JSON.parse(raw);
+    for(var k in PROG) if(k in o && typeof o[k] === typeof PROG[k]) PROG[k] = o[k];
+  }catch(e){}
+}
+function saveProg(){ try{ localStorage.setItem('gloamhold.progress', JSON.stringify(PROG)); }catch(e){} }
+function dayKey(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+}
+function awardSession(){
+  var SS = TUNING.session, gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom, lo = 1;
+  S.trail.forEach(function(p){ lo = Math.min(lo, p.c); });
+  if(S.trail.length && lo < PROG.best - 0.001){ gained += SS.starsImproved; PROG.best = lo; }
+  PROG.stars += gained;
+  PROG.sessions++;
+  var d = dayKey();
+  if(PROG.lastDay !== d){
+    var y = dayKey(new Date(Date.now() - 86400000));
+    PROG.streak = (PROG.lastDay === y) ? PROG.streak + 1 : 1;
+    PROG.lastDay = d;
+  }
+  saveProg();
+  return gained;
+}
+
+function drawStarRow(cx, y, n, u, max){
+  var show = Math.min(n, max || 8), i, w = u*5;
+  var x0 = cx - (show*w)/2 + w/2;
+  for(i=0;i<show;i++) drawIcon('star', x0 + i*w, y, u*2.2, C.gold);
+  if(n > show) mtext('+' + (n - show), cx + (show*w)/2 + u*3, y, u*4, C.gold, 'left', 600, F_MONO);
+}
+
+SCREENS.sessionDone = {
+  title: 'DONE',
+  onOpen: function(){ say('done'); },
+  nav: function(){},
+  confirm: function(){ sfx('uiOk'); closeMenu(); openMenu('title'); },
+  cancel: function(){ closeMenu(); openMenu('title'); },
+  custom: function(eye, vp, u){
+    var cx = vp.x + vp.w/2, cy = vp.y + vp.h*0.36, i;
+    mtext('WELL PLAYED', cx, vp.y + u*8, u*8, C.gold, 'center', 700, F_PIX);
+    for(i=0;i<6;i++){
+      var a = MENU.t*0.025 + i*1.047, rr = u*22 + Math.sin(MENU.t*0.05 + i)*u*2;
+      ctx.globalAlpha = 0.45 + 0.55*Math.abs(Math.sin(MENU.t*0.035 + i));
+      drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.62, u*2.6, C.gold);
+      ctx.globalAlpha = 1;
+    }
+    drawIcon('key', cx, cy, u*9, C.gold);
+    mtext('+' + S.starsGained + ' stars', cx, vp.y + vp.h*0.63, u*7, C.jade, 'center', 700, F_PIX);
+    drawStarRow(cx, vp.y + vp.h*0.73, S.starsGained, u, 8);
+    mtext(PROG.stars + ' stars  \u00b7  ' + PROG.streak + ' day streak', cx, vp.y + vp.h*0.82, u*3.4, '#8e8a7e', 'center', 400, F_MONO);
+    mtext(fmtTime(S.elapsed) + '  \u00b7  ' + S.rooms + ' rooms  \u00b7  strong eye ' + pct(cfg.strong),
+          cx, vp.y + vp.h - u*11, u*2.9, '#6a718c', 'center', 400, F_MONO);
+    drawMenuFoot({ hint:'A finish' }, vp, u);
+  }
+};
+
+SCREENS.stars = {
+  title: 'STARS',
+  nav: function(){},
+  confirm: function(){ menuCancel(); },
+  custom: function(eye, vp, u){
+    var cx = vp.x + vp.w/2;
+    mtext('STARS', cx, vp.y + u*8, u*9, C.gold, 'center', 700, F_PIX);
+    mtext(String(PROG.stars), cx, vp.y + vp.h*0.33, u*16, C.gold, 'center', 700, F_PIX);
+    drawStarRow(cx, vp.y + vp.h*0.50, Math.min(PROG.stars, 8), u, 8);
+    var rows = [
+      ['day streak', String(PROG.streak)],
+      ['sessions', String(PROG.sessions)],
+      ['best contrast', PROG.best < 1 ? pct(PROG.best) : '\u2014']
+    ], i, ry = vp.y + vp.h*0.62;
+    for(i=0;i<rows.length;i++){
+      mtext(rows[i][0], vp.x + u*10, ry, u*3.6, '#8e8a7e', 'left', 400, F_MONO);
+      mtext(rows[i][1], vp.x + vp.w - u*10, ry, u*3.6, '#ded9cb', 'right', 500, F_MONO);
+      ry += u*5.5;
+    }
+    drawMenuFoot({ hint:'B back' }, vp, u);
+  }
+};
+
+/* A wizard run that cannot be trusted ends here instead of writing a number
+   into cfg.strong. For the child it is just "let us go again"; the grown-up
+   line underneath says what actually happened. */
+SCREENS.kidRetry = {
+  title: 'AGAIN',
+  onOpen: function(){ say('again'); },
+  nav: function(){},
+  confirm: function(){ sfx('uiOk'); openMenu('kidHunt', true); },
+  cancel: function(){ closeMenu(); openMenu('title'); },
+  custom: function(eye, vp, u){
+    var cx = vp.x + vp.w/2;
+    mtext('ONE MORE GO', cx, vp.y + u*9, u*7, C.gold, 'center', 700, F_PIX);
+    drawIcon('star', cx, vp.y + vp.h*0.40, u*11, '#4a5166');
+    mtext('let us try that again', cx, vp.y + vp.h*0.60, u*5, C.bone, 'center', 600);
+    var why = HUNT && HUNT.fa >= TUNING.kid.falseAlarmLimit
+      ? 'Grown-up: ' + HUNT.fa + ' presses on rounds where nothing was shown, so this run measured nothing and the contrast was left alone.'
+      : 'Grown-up: nothing was caught, so there is no threshold to read. The contrast was left alone.';
+    mparagraph(why, cx, vp.y + vp.h - u*22, vp.w - u*12, u*3, '#6a718c', 1.5, 'center');
+    drawMenuFoot({ hint:'A again \u00b7 B stop' }, vp, u);
+  }
 };

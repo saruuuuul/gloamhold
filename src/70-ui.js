@@ -348,14 +348,36 @@ function loop(now){
   if(acc > 100) acc = 0;
   if(toastT>0) toastT--;
   if(S.elapsed - (S.lastLog||0) > 15000){ S.lastLog = S.elapsed; logContrast(); }
+  checkSessionGoal();
   render();
   if((G.dead || G.won) && !G.endT){ G.endT = now; }
   requestAnimationFrame(loop);
 }
 
+/* A session that ends on a planned note beats one that ends when a
+   five-year-old has had enough; the treasure screen is the reward for
+   stopping, not for pushing on. */
+function checkSessionGoal(){
+  var SS = TUNING.session;
+  if(!cfg.kidMode || SS.minutes <= 0 || S.sessionDone) return;
+  var left = SS.minutes*60000 - S.elapsed;
+  if(left <= SS.warnMinutes*60000 && !S.warned){
+    S.warned = true; toast('nearly finished'); say('soon');
+  }
+  if(left <= 0) finishSession();
+}
+function finishSession(){
+  S.sessionDone = true; S.ended = true;
+  running = false; letSleep();
+  S.starsGained = awardSession();
+  sfx('fanfare');
+  closeMenu(); openMenu('sessionDone');
+}
+
 /* ---------------- boot ---------------- */
 function start(state){
   loadTuning();
+  loadProg();
   LENS_PRESETS = TUNING.optics.presets;
   el('buildStamp').textContent = 'Build ' + BUILD;
   /* The artifact viewer never grants a page download permission, so the

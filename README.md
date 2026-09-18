@@ -120,6 +120,29 @@ centres do not sit over the pupils, the barrel correction is off-axis for both e
 adds strain and works against the fusion the whole exercise depends on. The **lens centre**
 control shifts both eyes together and cannot fix a mismatch — check the viewer physically.
 
+## Playing it with a child
+
+**Child mode** (on by default, grown-up screen to turn it off) changes the shape of the game
+rather than just the numbers: more hearts, slower and softer enemies, and **you cannot die** —
+you get knocked down and helped back up. It also caps how much contrast a bad room can cost,
+because otherwise a child who is struggling gets the stronger eye pushed back up on every hit,
+and the harder he finds it the less dichoptic load he actually receives.
+
+A session has a **planned ending**: it warns a couple of minutes out and then finishes on a
+treasure screen with stars, rather than running until a five-year-old has had enough. Stars
+and a day streak persist between sessions and are the only thing in this app that outlives a
+run. That is deliberate — the games this was built to replace lost on boredom, not on
+mechanism.
+
+The **butterfly wizard interleaves catch trials**: rounds where nothing is shown at all. Press
+the button on enough of those and the run is thrown away and the contrast left untouched,
+because a child who mashes the button would otherwise always "measure" whatever the last
+scheduled round happened to be. The screen asks for one more go; the line underneath tells the
+grown-up what actually happened.
+
+Held upright, the app shows **turn the phone** instead of rendering. Orientation lock is
+refused more often than it is granted, and two tall slivers do not fuse into anything.
+
 ## Sound
 
 Every effect is synthesised from oscillators at runtime. There are no audio files, nothing is
@@ -127,6 +150,12 @@ fetched, and the single-file build stays single-file — which also means it wor
 Artifact sandbox, where external requests are blocked. The context is only created on a real
 gesture, because browsers refuse otherwise. `TUNING.audio` has a master gain and separate
 `game` and `ui` sub-mixes; **Sound** on the title mutes everything.
+
+The wizard also **speaks its instructions**, through the browser's own speech synthesiser, for
+the same reason — no files, no network. Language is set on the grown-up screen. If the device
+has no voice installed for that language the app stays silent rather than reading Cyrillic
+aloud in an English voice, which is noise a child cannot act on; **Speech on this device**
+reports which it is, so check it on the actual phone before relying on it.
 
 ## On the phone
 

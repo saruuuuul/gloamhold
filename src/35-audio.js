@@ -147,3 +147,68 @@ function sfx(name){
   var f = SFX[name];
   if(f) try{ f(); }catch(e){}
 }
+
+/* ============================================================
+   SPEECH — the player is five and cannot read the screen, so the
+   wizard says its instructions out loud through the browser's own
+   speech synthesiser. Still no asset files and no network: the
+   voices belong to the device.
+
+   If the device has no voice for the chosen language we stay
+   SILENT rather than handing Cyrillic to an English voice, which
+   produces noise a child cannot act on. speechStatus() reports
+   that to the grown-up screen so the failure is visible instead of
+   mysterious.
+   ============================================================ */
+var SPEECH = {
+  goggles: { mn:'Шилээ зүүгээд том товчийг дар.',        en:'Put the goggles on, then press the big button.' },
+  hunt:    { mn:'Эрвээхэйг харвал товчийг дар.',          en:'Press the button when you see the butterfly.' },
+  good:    { mn:'Сайн байна!',                            en:'Nice one!' },
+  sticks:  { mn:'Хэдэн саваа харагдаж байна?',            en:'How many sticks can you see?' },
+  ready:   { mn:'Бэлэн боллоо. Тоглоцгооё!',              en:'All set. Let us play!' },
+  again:   { mn:'Дахиад нэг тоглоцгооё.',                 en:'Let us try that again.' },
+  soon:    { mn:'Бага зэрэг үлдлээ.',                     en:'Nearly finished.' },
+  done:    { mn:'Өнөөдрийн тоглоом дууслаа. Сайн тоглолоо!', en:'Today is done. Well played!' }
+};
+
+function speechVoices(){
+  try{ return (window.speechSynthesis && window.speechSynthesis.getVoices()) || []; }
+  catch(e){ return []; }
+}
+function speechVoiceFor(lang){
+  var vs = speechVoices(), i, want = String(lang || '').toLowerCase();
+  if(!want || want === 'off') return null;
+  for(i=0;i<vs.length;i++){
+    if(vs[i].lang && vs[i].lang.toLowerCase().indexOf(want) === 0) return vs[i];
+  }
+  return null;
+}
+function speechStatus(){
+  if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return 'unsupported';
+  if(cfg.speakLang === 'off') return 'off';
+  return speechVoiceFor(cfg.speakLang) ? 'ready' : 'no voice';
+}
+function say(key){
+  if(cfg.mute || cfg.speakLang === 'off') return;
+  var line = SPEECH[key];
+  if(!line) return;
+  try{
+    if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+    var v = speechVoiceFor(cfg.speakLang);
+    if(!v) return;
+    var text = line[cfg.speakLang] || line.en;
+    if(!text) return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.voice = v; u.lang = v.lang;
+    u.rate = TUNING.audio.speechRate;
+    u.pitch = TUNING.audio.speechPitch;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+/* voices arrive asynchronously on most engines */
+try{
+  if(window.speechSynthesis && 'onvoiceschanged' in window.speechSynthesis){
+    window.speechSynthesis.onvoiceschanged = function(){};
+  }
+}catch(e){}

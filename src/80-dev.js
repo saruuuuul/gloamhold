@@ -138,6 +138,8 @@ try{
     stereo: leaveFlat,
     sfx: sfx,
     get hunt(){ return HUNT; },
+    get prog(){ return PROG; },
+    get running(){ return running; },
     audio: function(){ return { ctx: AC ? AC.state : null, failed: audioFailed, muted: cfg.mute,
                                 master: TUNING.audio.master, effects: Object.keys(SFX).length }; },
     set: function(path, v){ setT(path, v); saveTuning(); rebuildDev(); },

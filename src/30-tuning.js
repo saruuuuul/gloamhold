@@ -54,7 +54,8 @@ var TUNING_DEFAULTS = {
     master: 0.5, game: 0.9, ui: 0.55,
     swingHz: 300, hitHz: 200, hurtHz: 180, pickupHz: 660,
     uiMoveHz: 420, uiOkHz: 620, uiBackHz: 380,
-    clickDur: 0.05, tailDur: 0.22
+    clickDur: 0.05, tailDur: 0.22,
+    speechRate: 0.85, speechPitch: 1.15
   },
 
   /* ---- the child setup wizard ----
@@ -65,7 +66,28 @@ var TUNING_DEFAULTS = {
   kid: {
     huntRounds: 6, huntStartContrast: 0.9, huntStepFactor: 0.72, huntFloor: 0.08,
     huntMissesToStop: 2, targetHoldFrames: 150, waitMinFrames: 40, waitVarFrames: 70,
-    feedbackFrames: 28, rewardFrames: 170, safetyBackoff: 1.0
+    feedbackFrames: 28, rewardFrames: 170, safetyBackoff: 1.0,
+    /* Catch trials: rounds where nothing is presented at all. A child who
+       simply mashes the button will press on these too, and that is the only
+       way to tell a real threshold from mashing. Above falseAlarmLimit the
+       run is discarded rather than reported as a number.
+       catchTrials is a COUNT, not a rate: leaving it to a per-round
+       probability meant a short run could arm only one blank and wave a
+       masher straight through. Exactly this many are now interleaved. */
+    catchTrials: 3, falseAlarmLimit: 2
+  },
+
+  /* ---- session shape: difficulty, length and rewards ----
+     Compliance is what this whole thing lives or dies on, so these matter as
+     much as the therapy numbers. In child mode the player cannot die and a
+     bad room can only cost stepUpsPerRoom steps of contrast — otherwise a
+     struggling child gets LESS dichoptic load for struggling, which is
+     exactly backwards. */
+  session: {
+    minutes: 12, warnMinutes: 2,
+    extraHearts: 3, foeSpeedScale: 0.7, foeHpScale: 0.75,
+    knockdownHp: 4, knockdownIframes: 160, stepUpsPerRoom: 1,
+    starsFinish: 2, starsCleanRoom: 1, starsImproved: 2
   }
 };
 

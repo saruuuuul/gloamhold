@@ -4,6 +4,11 @@ function mkFoe(type,x,y){
   var t = TUNING[type] || TUNING.grub;
   var b = { type:type, x:x, y:y, vx:0, vy:0, hurt:0, t:(Math.random()*100)|0,
             hp:t.hp, w:t.w, h:t.h, spd:t.speed||0, dmg:t.damage };
+  if(cfg.kidMode){
+    var SS = TUNING.session;
+    b.hp  = Math.max(1, Math.round(b.hp * SS.foeHpScale));
+    b.spd = b.spd * SS.foeSpeedScale;
+  }
   if(type==='bat')    b.ph = Math.random()*6.28;
   if(type==='sentry') b.cd = (t.cooldown*0.6)|0 + ((Math.random()*t.cooldown*0.6)|0);
   if(type==='boss'){  b.state='wait'; b.cd=t.restFrames; b.spawned=0; }
@@ -35,9 +40,13 @@ function stepDown(){
 }
 function stepUp(){
   if(!cfg.adapt) return;
+  /* Without this cap a child who is struggling gets hit repeatedly, the
+     stronger eye is pushed back up each time, and the harder he finds it the
+     less dichoptic load he actually receives — the opposite of the point. */
+  if(cfg.kidMode && G && (G.stepUps||0) >= TUNING.session.stepUpsPerRoom) return;
   var th = TUNING.therapy, q = th.quantise;
   var n = Math.min(1, Math.round((cfg.strong*th.stepUpFactor + th.stepUpFloorBump)/q)*q);
-  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; syncSliders(); saveCfg(); logContrast(); sfx('stepUp'); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
+  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; if(G) G.stepUps = (G.stepUps||0) + 1; syncSliders(); saveCfg(); logContrast(); sfx('stepUp'); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
 }
 var toastTxt='', toastT=0;
 function toast(s){ toastTxt=s; toastT=TUNING.feel.toastFrames; }
@@ -52,7 +61,17 @@ function hurtPlayer(n, sx, sy){
   var a = Math.atan2(p.y-sy, p.x-sx);
   p.vx = Math.cos(a)*TUNING.player.knockback; p.vy = Math.sin(a)*TUNING.player.knockback;
   stepUp();
-  if(p.hp<=0){ p.hp=0; G.dead=true; }
+  if(p.hp<=0){
+    if(cfg.kidMode){
+      /* A five-year-old who dies stops playing, and a session that ends at
+         minute three delivered nothing. In child mode you get knocked down
+         and helped back up instead. */
+      p.hp = Math.min(p.maxhp, TUNING.session.knockdownHp);
+      p.inv = TUNING.session.knockdownIframes;
+      S.knockdowns = (S.knockdowns || 0) + 1;
+      sfx('roomClear'); toast('up you get');
+    } else { p.hp = 0; G.dead = true; }
+  }
 }
 function hurtFoe(f,n){
   f.hp -= n; f.hurt = TUNING.combat.foeHurtFrames;

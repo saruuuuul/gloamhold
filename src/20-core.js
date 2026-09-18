@@ -15,7 +15,8 @@ var WW = RW*TS, WH = RH*TS;
 /* ---------------- config + persistence ---------------- */
 var cfg = { weakEye:'right', strong:0.40, mode:'rebalance', adapt:true, sep:0, zoom:1.0, tilt:false,
             lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false,
-            mute:false, flat:false, kidSet:false };
+            mute:false, flat:false, kidSet:false,
+            kidMode:true, speakLang:'mn' };
 try{ var raw = localStorage.getItem('gloamhold.cfg'); if(raw){ var o=JSON.parse(raw); for(var k in cfg) if(k in o) cfg[k]=o[k]; } }catch(e){}
 function saveCfg(){ try{ localStorage.setItem('gloamhold.cfg', JSON.stringify(cfg)); }catch(e){} }
 
@@ -25,7 +26,8 @@ var S = {
   trail:[],            // {t, c}
   checks:[],           // {t, answer}
   roomLog:[],          // {room, name, inAt, clearedAt, clean, hitsIn}
-  stepsDown:0, stepsUp:0, ended:false, won:false
+  stepsDown:0, stepsUp:0, ended:false, won:false,
+  knockdowns:0, sessionDone:false, starsGained:0
 };
 function logContrast(){ S.trail.push({ t:S.elapsed, c:cfg.strong }); if(S.trail.length>900) S.trail.splice(0,400); }
 
@@ -185,10 +187,13 @@ function buildGrid(key){
 
 /* ---------------- game state ---------------- */
 var G = null;
+function kidMaxHp(){
+  return TUNING.player.maxHp + (cfg.kidMode ? TUNING.session.extraHearts * 2 : 0);
+}
 function newGame(){
   G = {
     key:'1,2', grid:null, spec:null,
-    p:{ x:WW/2, y:WH/2+30, w:11, h:11, vx:0, vy:0, face:'n', hp:TUNING.player.maxHp, maxhp:TUNING.player.maxHp, inv:0, atk:0, flash:0 },
+    p:{ x:WW/2, y:WH/2+30, w:11, h:11, vx:0, vy:0, face:'n', hp:kidMaxHp(), maxhp:kidMaxHp(), inv:0, atk:0, flash:0 },
     foes:[], shots:[], items:[], fx:[],
     keys:0, bossKey:false, cleanRoom:true,
     fade:0, fadeDir:0, pending:null, won:false, dead:false, t:0
@@ -197,6 +202,7 @@ function newGame(){
      shows up in the log like every other one */
   S.started = performance.now(); S.elapsed=0; S.rooms=0; S.cleanRooms=0; S.hits=0; S.kills=0;
   S.trail=[]; S.checks=[]; S.roomLog=[]; S.stepsDown=0; S.stepsUp=0; S.ended=false; S.won=false;
+  S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false;
   roomState = {};
   enterRoom('1,2', null);
   logContrast();
@@ -211,7 +217,7 @@ function enterRoom(key, fromDir){
   }
   if(G.spec.drop && !st.taken && (st.cleared || G.spec.dropNow)) spawnDrop(key);
   if(G.foes.length===0){ st.cleared = true; }
-  G.cleanRoom = true;
+  G.cleanRoom = true; G.stepUps = 0;
   if(fromDir){
     var p=G.p;
     if(fromDir==='n'){ p.x=CC*TS+TS/2; p.y=WH-TS-6; p.face='n'; }
