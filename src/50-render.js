@@ -14,6 +14,7 @@ function renderScene(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.fillStyle = C.void; ctx.fillRect(0,0,VW,VH);
   if(nonius.on){ drawEyeNonius('left'); drawEyeNonius('right'); }
+  else if(MENU.id){ drawMenuEye('left'); drawMenuEye('right'); }
   else if(G){ drawEye('left'); drawEye('right'); }
   if(cfg.grid){ drawGrid('left'); drawGrid('right'); }
   drawSeam();

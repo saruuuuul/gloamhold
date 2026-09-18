@@ -33,13 +33,15 @@ a viewer when you discover the problem**. So the design optimises for three thin
 ```
 src/                 concatenated in filename order — 20 runs before 40
   00-head.html       title, fonts, CSS
-  10-panels.html     overlay screens (setup, alignment check, pause, tuning)
+  10-panels.html     flat fallback panels + the generated tuning panel
   20-core.js         config, canvas, WebGL lens stage, dungeon tables
-  30-tuning.js       TUNING: every balance / therapy / optics number
+  30-tuning.js       TUNING: every balance / therapy / audio / optics number
+  35-audio.js        synthesised sound effects — no asset files, no fetches
   40-entities.js     enemies, physics, damage, the adaptive staircase
   50-render.js       per-eye rendering, contrast layers, calibration grid
+  55-menu.js         the stereo menus and the child setup wizard
   60-hud.js          HUD, nonius check, input (keyboard / gamepad / touch / tilt)
-  70-ui.js           panels, sliders, wake lock, game loop, boot
+  70-ui.js           flow control, wake lock, game loop, boot
   80-dev.js          auto-generated tuning panel, session telemetry, GH console handle
 public/              manifest, service worker, icons — copied to dist verbatim
 build.py             concatenate → dist/index.html + dist/artifact-body.html
@@ -76,6 +78,55 @@ First-time setup, once:
 2. `git remote add origin git@github.com:<you>/gloamhold.git && git push -u origin main`
 3. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 4. The first push deploys to `https://<you>.github.io/gloamhold/`.
+
+## Menus are stereo, and a controller drives them
+
+Every screen the player sees — title, setup, alignment check, pause, summary, lens
+calibration — is drawn into the same offscreen canvas as the dungeon, once per eye, so it
+goes through the same barrel pre-distortion. A menu you cannot read with the viewer on is a
+menu you take the viewer off to use, and taking the viewer off is what ruins an alignment
+check. The HTML panels still exist as a flat fallback for a grown-up at a desk, and they are
+where the generated tuning panel lives; you reach them from **Flat menus** on the title.
+
+Controls, everywhere:
+
+| | |
+|---|---|
+| d-pad / stick / arrows / WASD | move the cursor, change a value |
+| A (or any face button) / Enter / Space | pick |
+| B / Esc / Backspace | back |
+| Start / P | play, or resume from the pause screen |
+| LB / RB | nudge the focused value |
+| tap | on a one-button screen, anywhere is the button; on a list, tap top / middle / bottom |
+
+## Setting it up with a child
+
+**Easy setup** on the title runs a three-step wizard with no reading in it: put the goggles
+on, catch the butterfly, say how many sticks you see.
+
+The butterfly step is a descending staircase. A target is shown to the **stronger eye only**,
+fainter each round, and the faintest one the player still catches — backed off one step —
+becomes the starting contrast. That is a detection threshold produced by a game, not a
+clinical measurement: a tired or distracted child reads lower than they really are. The
+grown-up screen shows what it measured and lets you override it.
+
+One decision the wizard deliberately does **not** ask: which eye is the weaker one. A
+five-year-old cannot answer it, and a wrong answer trains the wrong eye. It comes from the
+grown-up screen, from whoever measured it.
+
+Also worth knowing before you put a small child in a viewer: Cardboard-style optics are
+built for an adult eye spacing, around 63 mm. A five-year-old is nearer 50 mm. If the lens
+centres do not sit over the pupils, the barrel correction is off-axis for both eyes, which
+adds strain and works against the fusion the whole exercise depends on. The **lens centre**
+control shifts both eyes together and cannot fix a mismatch — check the viewer physically.
+
+## Sound
+
+Every effect is synthesised from oscillators at runtime. There are no audio files, nothing is
+fetched, and the single-file build stays single-file — which also means it works inside the
+Artifact sandbox, where external requests are blocked. The context is only created on a real
+gesture, because browsers refuse otherwise. `TUNING.audio` has a master gain and separate
+`game` and `ui` sub-mixes; **Sound** on the title mutes everything.
 
 ## On the phone
 

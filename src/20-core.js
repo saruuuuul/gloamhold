@@ -14,7 +14,8 @@ var WW = RW*TS, WH = RH*TS;
 
 /* ---------------- config + persistence ---------------- */
 var cfg = { weakEye:'right', strong:0.40, mode:'rebalance', adapt:true, sep:0, zoom:1.0, tilt:false,
-            lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false };
+            lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false,
+            mute:false, flat:false, kidSet:false };
 try{ var raw = localStorage.getItem('gloamhold.cfg'); if(raw){ var o=JSON.parse(raw); for(var k in cfg) if(k in o) cfg[k]=o[k]; } }catch(e){}
 function saveCfg(){ try{ localStorage.setItem('gloamhold.cfg', JSON.stringify(cfg)); }catch(e){} }
 

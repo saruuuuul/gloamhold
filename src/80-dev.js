@@ -10,7 +10,12 @@ var RANGE_RULES = [
   [/^(chroma)$/,                                          function(){ return {min:0, max:0.02, step:0.001}; }],
   [/^(k1|k2)$/,                                           function(){ return {min:0, max:0.6, step:0.01}; }],
   [/(friction|accel|Factor|attackSlow|Floor|quantise|minContrast|FloorBump|wobble)$/i,
-                                                          function(){ return {min:0, max:1, step:0.01}; }]
+                                                          function(){ return {min:0, max:1, step:0.01}; }],
+  [/Hz$/,                                                 function(v){ return {min:40, max:Math.max(2000, Math.ceil(v*2)), step:10}; }],
+  [/^(master|game|ui)$/,                                  function(){ return {min:0, max:1, step:0.05}; }],
+  [/(Contrast|Inset|Pulse)$/i,                            function(){ return {min:0, max:1, step:0.01}; }],
+  [/(Rounds|MissesToStop|maxRows|repeatDelay|repeatRate)$/i, function(v){ return {min:1, max:Math.max(12, Math.ceil(v*3)), step:1}; }],
+  [/^(clickDur|tailDur)$/,                                function(){ return {min:0.01, max:1, step:0.01}; }]
 ];
 function rangeFor(path, v){
   var leaf = path.split('.').pop(), i;
@@ -26,7 +31,10 @@ var SECTION_NOTE = {
   combat:  'Shared hit reactions.',
   therapy: 'The staircase. stepDownFactor is how hard a clean room pushes the stronger eye down; stepUpFactor is how hard a hit pushes it back.',
   optics:  'Lens preset values. Editing these updates what the preset buttons load.',
-  feel:    'Timing of feedback, not difficulty.'
+  feel:    'Timing of feedback, not difficulty.',
+  menu:    'Stereo menu chrome. Sizes are in viewport units (1 = 1% of the short side of one eye), so they scale with the screen.',
+  audio:   'Synthesised sound. master is the bus; game and ui are the two sub-mixes. Frequencies are in Hz.',
+  kid:     'The child setup wizard. huntStepFactor is how much fainter each round gets; safetyBackoff pads the final contrast above the faintest catch.'
 };
 var devBuilt = false;
 function buildDevPanel(){
@@ -120,6 +128,18 @@ try{
     get session(){ return S; },
     get game(){ return G; },
     record: sessionRecord,
+    get menu(){ return MENU; },
+    screens: function(){ var o=[], k; for(k in SCREENS) o.push(k); return o; },
+    open: function(id){ openMenu(id); },
+    pick: function(i){ MENU.idx = i; },
+    confirm: menuConfirm,
+    play: startRun,
+    flat: goFlat,
+    stereo: leaveFlat,
+    sfx: sfx,
+    get hunt(){ return HUNT; },
+    audio: function(){ return { ctx: AC ? AC.state : null, failed: audioFailed, muted: cfg.mute,
+                                master: TUNING.audio.master, effects: Object.keys(SFX).length }; },
     set: function(path, v){ setT(path, v); saveTuning(); rebuildDev(); },
     reset: resetTuning,
     redraw: function(){ render(); }

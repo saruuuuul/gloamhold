@@ -106,14 +106,21 @@ function drawPreview(){
 }
 
 /* ---- panels ---- */
-function show(id){ ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = (p!==id); }); el('nonBar').hidden = true; el('lensBar').hidden = true; cfg.grid = false; }
+function show(id){
+  /* a flat panel and a stereo menu must never be live at once: the UI loop
+     polls the gamepad for whichever menu is open, and a hidden one would eat
+     the input */
+  closeMenu();
+  ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = (p!==id); });
+  el('nonBar').hidden = true; el('lensBar').hidden = true; cfg.grid = false;
+}
 function hideAll(){ ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = true; }); el('nonBar').hidden = true; el('lensBar').hidden = true; }
 
 el('btnStart').onclick  = function(){ show('pCheck'); el('checkResult').hidden = true; };
 el('btnBackTitle').onclick = function(){ show('pTitle'); drawPreview(); };
-el('btnCheckShow').onclick = function(){ hideAll(); nonius.on = true; el('nonBar').hidden = false; render(); };
-el('btnEnter').onclick  = function(){ goImmersive(); keepAwake(); hideAll(); nonius.on=false; if(!G || S.ended) newGame(); running = true; last = performance.now(); requestAnimationFrame(loop); };
-el('btnResume').onclick = function(){ keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
+el('btnCheckShow').onclick = function(){ audioUnlock(); hideAll(); nonius.on = true; el('nonBar').hidden = false; render(); };
+el('btnEnter').onclick  = function(){ audioUnlock(); goImmersive(); keepAwake(); hideAll(); nonius.on=false; if(!G || S.ended) newGame(); running = true; last = performance.now(); requestAnimationFrame(loop); };
+el('btnResume').onclick = function(){ audioUnlock(); keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
 el('btnRecheck').onclick= function(){ running=false; show('pCheck'); el('checkResult').hidden = true; };
 el('btnQuit').onclick   = function(){ running=false; S.ended=true; letSleep(); show('pTitle'); drawPreview(); };
 Array.prototype.forEach.call(document.querySelectorAll('#nonBar button'), function(b){
@@ -133,7 +140,10 @@ var devFrom = 'pTitle';
 function openDev(from){ devFrom = from; running=false; buildDevPanel(); syncJsonBox(); show('pDev'); }
 el('btnDevTitle').onclick = function(){ openDev('pTitle'); };
 el('btnDev').onclick      = function(){ openDev('pPause'); };
-el('btnDevBack').onclick  = function(){ show(devFrom); drawPreview(); render(); };
+el('btnDevBack').onclick  = function(){
+  if(devReturnStereo){ var r = devReturnStereo; devReturnStereo = null; hideAll(); openMenu(r, true); return; }
+  show(devFrom); drawPreview(); render();
+};
 el('btnRespawn').onclick  = function(){
   if(!G) return;
   rs(G.key).cleared = false; enterRoom(G.key, null); render();
@@ -213,11 +223,68 @@ el('btnTilt').onclick = function(){
 
 /* ---- pause / results ---- */
 function fmtTime(ms){ var s=Math.round(ms/1000); return Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s'; }
-function doPause(){ running = false; fillStats('Paused','gloamhold'); show('pPause'); }
+function doPause(){
+  running = false;
+  if(cfg.flat){ fillStats('Paused','gloamhold'); show('pPause'); return; }
+  openMenu('pause');
+}
 function endRun(){
   running = false; S.ended = true; S.won = !!(G && G.won);
-  fillStats(S.won ? 'The warden falls' : 'You fell', S.won ? 'dungeon complete' : 'run ended');
-  show('pPause');
+  sfx(S.won ? 'win' : 'lose');
+  letSleep();
+  if(cfg.flat){
+    fillStats(S.won ? 'The warden falls' : 'You fell', S.won ? 'dungeon complete' : 'run ended');
+    show('pPause');
+    return;
+  }
+  closeMenu(); openMenu('summary');
+}
+
+/* ---------------- flow the stereo menus drive ---------------- */
+var devReturnStereo = null;
+function openDevStereo(from){ devReturnStereo = from; openDev('pTitle'); }
+
+function startRun(){
+  audioUnlock(); goImmersive(); keepAwake();
+  closeMenu(); hideAll(); nonius.on = false;
+  if(!G || S.ended) newGame();
+  running = true; last = performance.now();
+  requestAnimationFrame(loop);
+}
+function resumeRun(){
+  audioUnlock(); keepAwake(); closeMenu(); hideAll();
+  running = true; last = performance.now();
+  requestAnimationFrame(loop);
+}
+function endSession(){
+  running = false; S.ended = true; letSleep();
+  closeMenu(); openMenu('title'); drawPreview();
+}
+function menuStart(){
+  if(MENU.id === 'pause') resumeRun();
+  else startRun();
+}
+function startNonius(){ audioUnlock(); openMenu('nonius'); }
+function goFlat(){
+  cfg.flat = true; saveCfg();
+  show('pTitle'); drawPreview(); render();
+}
+function leaveFlat(){
+  cfg.flat = false; saveCfg();
+  hideAll(); openMenu('title');
+}
+
+/* One persistent frame callback for the menus. Gamepads expose state, not
+   events, so a menu that a controller can drive has to be polled; this is
+   also what animates the child wizard's timers. It idles out in one branch
+   while the dungeon loop is running. */
+var uiRAF = 0;
+function uiLoop(){
+  uiRAF = requestAnimationFrame(uiLoop);
+  if(running || !MENU.id) return;
+  menuTick();
+  gatherMenuInput();
+  render();
 }
 function fillStats(title, sub){
   el('pauseTitle').textContent = title; el('pauseSub').textContent = sub;
@@ -312,8 +379,10 @@ function start(state){
   if(cfg.tilt && 'DeviceOrientationEvent' in window && !DeviceOrientationEvent.requestPermission){
     tilt.on = true; addEventListener('deviceorientation', onTilt);
   }
-  newGame(); running = false; render();
-  show('pTitle');
+  newGame(); running = false;
+  if(cfg.flat) show('pTitle'); else openMenu('title');
+  render();
+  uiLoop();
 }
 try{
   if(window.claude && window.claude.hot){

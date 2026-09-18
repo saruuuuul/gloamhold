@@ -31,13 +31,13 @@ function stepDown(){
   if(!cfg.adapt) return;
   var th = TUNING.therapy, q = th.quantise;
   var n = Math.max(th.minContrast, Math.round((cfg.strong*th.stepDownFactor)/q)*q);
-  if(n < cfg.strong-0.001){ cfg.strong = n; S.stepsDown++; syncSliders(); saveCfg(); logContrast(); toast('stronger eye ↓ ' + Math.round(cfg.strong*100) + '%'); }
+  if(n < cfg.strong-0.001){ cfg.strong = n; S.stepsDown++; syncSliders(); saveCfg(); logContrast(); sfx('stepDown'); toast('stronger eye ↓ ' + Math.round(cfg.strong*100) + '%'); }
 }
 function stepUp(){
   if(!cfg.adapt) return;
   var th = TUNING.therapy, q = th.quantise;
   var n = Math.min(1, Math.round((cfg.strong*th.stepUpFactor + th.stepUpFloorBump)/q)*q);
-  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; syncSliders(); saveCfg(); logContrast(); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
+  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; syncSliders(); saveCfg(); logContrast(); sfx('stepUp'); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
 }
 var toastTxt='', toastT=0;
 function toast(s){ toastTxt=s; toastT=TUNING.feel.toastFrames; }
@@ -47,6 +47,7 @@ function hurtPlayer(n, sx, sy){
   var p = G.p;
   if(p.inv>0 || G.dead) return;
   p.hp -= n; p.inv = TUNING.player.iframes; p.flash = TUNING.player.flashFrames;
+  sfx('hurt');
   S.hits++; G.cleanRoom = false;
   var a = Math.atan2(p.y-sy, p.x-sx);
   p.vx = Math.cos(a)*TUNING.player.knockback; p.vy = Math.sin(a)*TUNING.player.knockback;
@@ -55,6 +56,7 @@ function hurtPlayer(n, sx, sy){
 }
 function hurtFoe(f,n){
   f.hp -= n; f.hurt = TUNING.combat.foeHurtFrames;
+  sfx(f.hp<=0 ? 'foeDie' : 'hitFoe');
   var a = Math.atan2(f.y-G.p.y, f.x-G.p.x), kb = TUNING.combat.foeKnockback;
   f.vx = Math.cos(a)*kb; f.vy = Math.sin(a)*kb;
   if(f.hp<=0){
@@ -80,6 +82,7 @@ function onRoomClear(){
     }
   }
   if(G.spec.drop && !st.taken) spawnDrop(G.key);
+  sfx('roomClear');
   G.fx.push({x:WW/2,y:WH/2,t:40,type:'clear'});
 }
 
@@ -108,7 +111,7 @@ function update(){
   p.vy = p.vy*PT.friction + iy*SPD*PT.accel;
   moveBody(p, p.vx, 0); moveBody(p, 0, p.vy);
   if(p.inv>0) p.inv--; if(p.flash>0) p.flash--;
-  if(input.atk && p.atk<=0){ p.atk = PT.atkFrames; G.fx.push({x:p.x,y:p.y,t:8,type:'swing',face:p.face}); }
+  if(input.atk && p.atk<=0){ p.atk = PT.atkFrames; sfx('swing'); G.fx.push({x:p.x,y:p.y,t:8,type:'swing',face:p.face}); }
   input.atk = false;
 
   /* sword hitbox */
@@ -137,10 +140,11 @@ function update(){
         var ax = Math.abs(dx)>Math.abs(dy) ? Math.sign(dx) : 0;
         var ay = ax===0 ? Math.sign(dy) : 0;
         G.shots.push({x:f.x,y:f.y,vx:ax*TF.shotSpeed,vy:ay*TF.shotSpeed,w:6,h:6,life:TF.shotLife});
+        sfx('shot');
       }
     } else if(f.type==='boss'){
       f.cd--;
-      if(f.state==='wait'){ f.vx*=0.9; f.vy*=0.9; if(f.cd<=0){ f.state='charge'; f.cd=TF.chargeFrames; f.dirx=dx/d; f.diry=dy/d; } }
+      if(f.state==='wait'){ f.vx*=0.9; f.vy*=0.9; if(f.cd<=0){ f.state='charge'; f.cd=TF.chargeFrames; f.dirx=dx/d; f.diry=dy/d; sfx('bossWake'); } }
       else { f.vx = f.dirx*f.spd*TF.chargeBoost; f.vy = f.diry*f.spd*TF.chargeBoost; if(f.cd<=0){ f.state='wait'; f.cd=TF.restFrames; } }
       if(f.hp<=TF.spawnBelowHp && f.spawned<TF.maxSpawns && f.t%TF.spawnEvery===0){ f.spawned++; G.foes.push(mkFoe('bat', f.x+20, f.y)); }
     }
@@ -164,6 +168,7 @@ function update(){
       if(it.type==='vessel'){ p.maxhp += 2; p.hp = p.maxhp; }
       if(it.type==='smallkey'){ G.keys++; }
       if(it.type==='bosskey'){ G.bossKey = true; }
+      sfx((it.type==='smallkey'||it.type==='bosskey') ? 'keyGet' : 'pickup');
       toast(ITEMNAME[it.type]);
       G.items.splice(i,1);
     }
@@ -205,9 +210,9 @@ function checkDoors(){
   if(!d) return;
   if(spec.lock && spec.lock[d] && !st.unlocked[d]){
     var need = spec.lock[d];
-    if(need==='small' && G.keys>0){ G.keys--; st.unlocked[d]=true; G.grid=buildGrid(G.key); toast('the lock gives'); }
-    else if(need==='boss' && G.bossKey){ st.unlocked[d]=true; G.grid=buildGrid(G.key); toast('the warden stirs'); }
-    else if(G.t%90===0){ toast(need==='boss' ? "sealed \u2014 the warden's key is missing" : 'locked \u2014 you need a small key'); }
+    if(need==='small' && G.keys>0){ G.keys--; st.unlocked[d]=true; G.grid=buildGrid(G.key); sfx('unlock'); toast('the lock gives'); }
+    else if(need==='boss' && G.bossKey){ st.unlocked[d]=true; G.grid=buildGrid(G.key); sfx('unlock'); toast('the warden stirs'); }
+    else if(G.t%90===0){ sfx('locked'); toast(need==='boss' ? "sealed \u2014 the warden's key is missing" : 'locked \u2014 you need a small key'); }
     return;
   }
   var nk = (cur[0]+DIRV[d][0]) + ',' + (cur[1]+DIRV[d][1]);

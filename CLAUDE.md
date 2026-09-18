@@ -69,19 +69,35 @@ still looks fine, which is the worst kind of bug here.
 6. **Every new number goes in `TUNING` (`src/30-tuning.js`), not as a literal.** The dev panel
    grows a slider for each numeric leaf automatically. If the auto-picked slider range is
    wrong, add a pattern to `RANGE_RULES` in `src/80-dev.js` rather than hard-coding a control.
+7. **Menu chrome is binocular and identical.** Every stereo screen draws the same pixels into
+   both viewports at full contrast — that is the fusion lock, same job as the in-game corner
+   brackets. `tests/smoke.mjs` compares the two halves with the lens off and fails above 1%
+   difference. The two deliberate exceptions are the nonius bars and the child wizard's
+   target; both are marked `eye-alpha: intentional` and both *are* the measurement.
+8. **A screen you cannot use with the viewer on does not exist.** New player-facing UI goes in
+   `SCREENS` (`src/55-menu.js`), not in `10-panels.html`. The HTML panels are a flat fallback
+   for a grown-up at a desk and the home of the generated tuning panel; reaching for them for
+   anything else means the player has to take the viewer off, which is exactly what invalidates
+   an alignment check.
+9. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
+   Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
+   `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name')`, which
+   is a no-op until `audioUnlock()` has run on a real gesture.
 
 ## File map
 
 | File | Holds |
 |---|---|
 | `src/00-head.html` | `<title>`, Google Fonts link, all CSS |
-| `src/10-panels.html` | Overlay screens: setup, alignment check, pause, tuning, lens bar |
+| `src/10-panels.html` | **Flat fallback** panels + the generated tuning panel. Not what you see in the viewer |
 | `src/20-core.js` | `cfg`, session `S`, canvas + WebGL lens stage, `alphaFor`, dungeon tables, room building |
 | `src/30-tuning.js` | `TUNING` and its defaults, load/save/walk helpers |
+| `src/35-audio.js` | Synthesised sound: `audioUnlock`, `tone`/`hiss` primitives, the `SFX` catalogue, `sfx(name)` |
 | `src/40-entities.js` | Enemy behaviour, collision, damage, the adaptive staircase, doors |
 | `src/50-render.js` | Palette, per-eye render, sprites, calibration grid |
-| `src/60-hud.js` | HUD, nonius check, keyboard / gamepad / touch / tilt input |
-| `src/70-ui.js` | Panel wiring, sliders, wake lock, immersive mode, game loop, boot |
+| `src/55-menu.js` | Stereo menus: engine, `SCREENS`, icons, the child setup wizard |
+| `src/60-hud.js` | HUD, nonius check, keyboard / gamepad / touch / tilt input, menu input polling |
+| `src/70-ui.js` | Flow control (`startRun`/`resumeRun`/`doPause`), flat panel wiring, wake lock, game loop, `uiLoop`, boot |
 | `src/80-dev.js` | Auto-generated tuning panel, session telemetry, `window.GH` handle |
 | `public/` | manifest, service worker, icons — copied to `dist/` with `__BUILD__` substituted |
 
@@ -94,7 +110,17 @@ still looks fine, which is the worst kind of bug here.
 - **Staircase.** A room cleared without a hit multiplies the stronger eye's contrast by
   `stepDownFactor`; a hit multiplies it by `stepUpFactor`. It is deliberately asymmetric.
 - **Nonius check.** Vertical bar to the weak eye, horizontal to the strong, ring to both.
-  Answer 3 ("no green bar") means suppression and drops the contrast automatically.
+  Answer 3 ("no green bar") means suppression and drops the contrast automatically. It runs
+  as a stereo screen (`SCREENS.nonius`) so it can be answered without lifting the viewer —
+  lifting it is what makes the answer meaningless. `noniusAnswer()` stores its verdict in
+  `noniusMsg` for whichever presentation asked.
+- **Child wizard.** `SCREENS.kidIntro` → `kidHunt` → `kidSticks` → `kidDone`. `kidHunt` is a
+  descending staircase: a target is presented to the **stronger eye only** at `HUNT.c`, and
+  the faintest catch divided by `huntStepFactor` (times `safetyBackoff`) becomes `cfg.strong`.
+  Two misses or `huntRounds` catches ends it. It sets `cfg.kidSet`. It is a detection
+  threshold from a game — do not let copy anywhere imply it is a clinical measurement, and do
+  not move "which eye is weaker" into it: a child cannot answer that and a wrong answer trains
+  the wrong eye.
 - **Dungeon.** 3×3 room grid in `ROOMS` (`20-core.js`), keyed `"col,row"`, row 0 at the top.
   Required path: start `1,2` → `0,2` → `0,1` → `0,0` (warden's key) → `1,1` → boss `1,0`.
   The small key in `2,1` unlocks `2,0` for an optional heart vessel. Adding a room means an
@@ -113,6 +139,16 @@ still looks fine, which is the worst kind of bug here.
   disable themselves. Keep that path working — it is the fallback on old hardware.
 - `newGame()` clears session stats *before* entering the first room, so the opening room
   appears in the room log. Do not reorder those lines.
+- **Menu navigation is half event-driven and half polled, on purpose.** Keyboard direction
+  presses step from the `keydown` event; the poll in `gatherMenuInput()` only supplies
+  auto-repeat. Doing it all from the poll loses two taps that land inside one animation
+  frame — that bug shipped once and made the menu feel like it was ignoring input.
+  Gamepads have no events, so their first step *and* their repeat both come from the poll.
+- `show()` calls `closeMenu()` and `openMenu()` calls `hideAll()`. A flat panel and a stereo
+  menu must never be live at once, or the UI loop keeps driving the hidden one's cursor.
+- The menus animate, so there is a permanent `requestAnimationFrame` (`uiLoop`) that idles
+  out in one branch while the dungeon loop owns the frame. Do not "optimise" it away — it is
+  also the only thing polling the gamepad in menus.
 
 ## Working style
 
