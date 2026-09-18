@@ -92,7 +92,12 @@ function drawTouchPads(eye, vp){
   ctx.globalAlpha = 1;
 }
 
-/* ---------------- nonius / suppression check ---------------- */
+/* ---------------- nonius / suppression check ----------------
+   eye-alpha: intentional — the nonius test deliberately drives each eye's bar
+   directly (weak eye at full contrast, strong eye at cfg.strong) rather than
+   through alphaFor(). That IS the measurement: if the strong-eye bar vanishes
+   its contrast is below threshold, and if the weak-eye bar vanishes that is
+   suppression. Routing it through the layer system would hide both answers. */
 var nonius = { on:false, answer:null };
 function drawEyeNonius(eye){
   var g = eyeGeom(eye), vp=g.vp, s=g.s;

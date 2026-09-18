@@ -72,7 +72,10 @@ function syncSliders(){
 }
 function afterCfg(){ syncSliders(); drawPreview(); if(!running) render(); }
 
-/* ---- live calibration preview ---- */
+/* ---- live calibration preview ----
+   eye-alpha: intentional — the preview labels each half "weak eye"/"strong eye"
+   from cfg.weakEye for the caption only; the sprites themselves go through
+   alphaFor(), so what you see here is exactly what the dungeon will do. */
 function drawPreview(){
   var c = el('prev'); if(!c) return;
   var w = c.clientWidth || 300, h = 104, d = Math.min(devicePixelRatio||1,2);
