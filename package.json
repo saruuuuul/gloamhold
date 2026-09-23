@@ -1,0 +1,14 @@
+{
+  "name": "gloamhold",
+  "private": true,
+  "description": "Dev tooling only. The app itself has no dependencies and ships as one HTML file.",
+  "scripts": {
+    "build": "python build.py",
+    "check": "node tools/check.mjs",
+    "smoke": "node tests/smoke.mjs",
+    "verify": "python build.py && node tools/check.mjs && node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

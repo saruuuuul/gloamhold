@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* Headless playthrough. Optional: needs `npm i -D playwright`.
+/* Headless playthrough. Run `npm install` once; no browser download needed if
+   Chrome or Edge is installed (see launch() below).
    Checks the things a static check cannot: that the page boots without errors,
    that both eye viewports actually differ in contrast, that a menu is drawn
    identically to both eyes, that the child wizard lands on a sane contrast,
@@ -36,10 +37,26 @@ if (!chromium) {
   process.exit(0);
 }
 
+/* Bundled browser first, then whatever Chromium the machine already has.
+   Every Playwright release pins a new browser revision, and without this a
+   routine `npm update` turned the smoke test into an uncaught crash until
+   someone downloaded another ~150 MB build of Chromium to run one file. */
+async function launch() {
+  const args = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  const tried = [];
+  for (const channel of [undefined, 'chrome', 'msedge']) {
+    try {
+      return { browser: await chromium.launch({ args, ...(channel ? { channel } : {}) }), via: channel || 'bundled chromium' };
+    } catch (e) {
+      tried.push(`${channel || 'bundled'}: ${String(e.message).split('\n')[0]}`);
+    }
+  }
+  console.log('skip — no usable Chromium found:\n  ' + tried.join('\n  ') + '\n  fix with: npx playwright install chromium');
+  process.exit(0);
+}
+
 const fails = [];
-const browser = await chromium.launch({
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-});
+const { browser, via } = await launch();
 const pg = await browser.newPage({ viewport: { width: 900, height: 440 }, deviceScaleFactor: 2 });
 pg.on('pageerror', (e) => fails.push('pageerror: ' + e.message));
 pg.on('console', (m) => { if (m.type() === 'error') fails.push('console: ' + m.text()); });
@@ -150,13 +167,19 @@ if (trials.honest.verdict !== 'kidSticks')
   fails.push(`an honest wizard run was rejected (ended on "${trials.honest.verdict}")`);
 if (trials.honest.fa !== 0) fails.push(`honest run recorded ${trials.honest.fa} false alarms`);
 
-/* the child wizard: a descending staircase that ends on a usable contrast */
+/* the child wizard: a descending staircase that ends on a usable contrast.
+   This plays HONESTLY — it lets catch trials time out instead of pressing on
+   them. Written before catch trials existed, it used to press every round,
+   which made it a button-masher the app now rightly rejects; and a blank
+   round does not move the contrast, so logging it broke the monotonic check. */
 const kid = await pg.evaluate(async () => {
   const s = (ms) => new Promise((r) => setTimeout(r, ms));
   GH.cfg.strong = 0.4; GH.open('kidHunt'); await s(120);
   const presented = [];
-  for (let i = 0; i < 12 && GH.menu.id === 'kidHunt'; i++) {
-    GH.hunt.shown = true; GH.hunt.hold = 9999;
+  for (let i = 0; i < 40 && GH.menu.id === 'kidHunt'; i++) {
+    GH.hunt.shown = true;
+    if (GH.hunt.blank) { GH.hunt.hold = 1; await s(40); continue; }
+    GH.hunt.hold = 9999;
     presented.push(+GH.hunt.c.toFixed(3));
     GH.confirm(); await s(40);
   }
@@ -217,4 +240,4 @@ if (!rec.build) fails.push('session log has no build stamp');
 
 await browser.close();
 if (fails.length) { fails.forEach((f) => console.log('FAIL  ' + f)); console.log(`\n${fails.length} failure(s)`); process.exit(1); }
-console.log(`ok — booted clean, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);
+console.log(`ok [${via}] — booted clean, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);

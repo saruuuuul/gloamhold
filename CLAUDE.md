@@ -16,7 +16,8 @@ change would make the tool feel more clinical than it is, say so rather than shi
 ```bash
 python3 build.py          # src/ + public/ -> dist/   (the only build step)
 node tools/check.mjs      # zero-dependency invariant + wiring checks — run after every edit
-node tests/smoke.mjs      # optional headless playthrough; needs `npm i -D playwright`
+npm install               # once: dev tooling only (playwright); the app itself has no deps
+node tests/smoke.mjs      # headless playthrough — or `npm run verify` for all three
 python3 -m http.server 8000 --directory dist   # serve for a phone on the same wifi
 ```
 
@@ -182,6 +183,11 @@ still looks fine, which is the worst kind of bug here.
   returns whenever `VH > VW`. Orientation lock is denied far more often than granted, and two
   tall slivers fuse into nothing. It is deliberately not stereo — there is nothing worth
   fusing until the phone is turned.
+- **The smoke test does not need Playwright's own browser.** It tries the bundled Chromium,
+  then the installed Chrome, then Edge. Each Playwright release pins a new browser revision,
+  so without the fallback a routine `npm update` made the test crash until someone downloaded
+  another ~150 MB of Chromium. Its success line names which one ran (`ok [chrome] — …`).
+  It still exits 0 with `skip` if nothing is found — say so when reporting, a skip is not a pass.
 - Everything time-based hangs off `requestAnimationFrame`, so a backgrounded or unpainted
   page freezes the session clock. That is correct (time should not accrue in a pocket) but it
   makes headless testing of the session timer unreliable unless something forces a paint.
