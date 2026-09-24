@@ -191,6 +191,130 @@ if (!kid.presented.every((v, i, a) => i === 0 || v < a[i - 1])) fails.push('wiza
 if (!(kid.strong > 0.04 && kid.strong <= 1)) fails.push(`wizard produced an unusable contrast: ${kid.strong}`);
 if (!kid.kidSet) fails.push('wizard did not flag cfg.kidSet');
 
+/* ---------------- the islands ----------------
+   Every island the sea can offer, plus fifty more seeds, must be winnable:
+   matching doors, no enemy inside a wall (island 1 had nine), clear push
+   lanes, and a warden's key reachable before its lock. */
+const islands = await pg.evaluate(() => GH.islandCheck(1, 60));
+const brokenIslands = islands.filter((x) => x.problems.length || x.fallback);
+for (const x of brokenIslands.slice(0, 5)) fails.push(`island ${x.n}: ${x.fallback ? 'fell back to home; ' : ''}${x.problems.slice(0, 3).join('; ')}`);
+
+/* the clue layer: faint in the stronger eye, weak-eye-only in forced fusion */
+const clue = await pg.evaluate(() => {
+  const weak = GH.cfg.weakEye, strong = weak === 'left' ? 'right' : 'left', keep = [GH.cfg.mode, GH.cfg.strong];
+  GH.cfg.strong = 0.3;
+  GH.cfg.mode = 'rebalance'; const r = [GH.alphaFor(weak, 'clue'), GH.alphaFor(strong, 'clue')];
+  GH.cfg.mode = 'split';     const s = [GH.alphaFor(weak, 'clue'), GH.alphaFor(strong, 'clue')];
+  GH.cfg.mode = keep[0]; GH.cfg.strong = keep[1];
+  return { r, s };
+});
+if (clue.r[0] !== 1 || Math.abs(clue.r[1] - 0.3) > 1e-9) fails.push(`clue layer in rebalance is ${clue.r}, expected [1, 0.3]`);
+if (clue.s[0] !== 1 || clue.s[1] !== 0) fails.push(`clue layer in forced fusion is ${clue.s}, expected weak-eye only`);
+
+/* the mechanics, driven through the real update() with the live loop frozen
+   so nothing but the test is moving the world */
+const mech = await pg.evaluate(() => {
+  const out = {};
+  const begin = (island, room) => {
+    GH.cfg.kidMode = true; GH.loadIsland(island); GH.session.ended = true; GH.play(); GH.freeze();
+    if (room) GH.room(room);
+    GH.game.foes.length = 0; GH.game.sealed = false;
+    const I = GH.input; I.x = I.y = 0; I.atk = I.tool = I.toolPress = I.cycle = false;
+  };
+  const I = () => GH.input;
+
+  /* cut a bush: Threshold has one at (1,2); stand below it and swing north */
+  begin(1);
+  GH.tp(1, 3, 'n'); I().atk = true; GH.step(20);
+  out.bushCut = GH.game.grid[2][1] === 0;
+
+  /* push the Cache's stone three tiles south onto its plate */
+  begin(1, '2,0');
+  GH.tp(4, 3, 's'); I().y = 1; GH.step(160); I().y = 0; GH.step(20);
+  const cache = GH.game.objs;
+  out.pushSolved = !!cache.find((o) => o.k === 'block' && o.x === 4 && o.y === 7);
+  out.pushChest = !!cache.find((o) => o.k === 'chest' && o.shown);
+
+  /* bombs open the Rookery's cracked wall; the chest behind it gives coins */
+  begin(1, '2,2');
+  GH.grant('bombs');
+  GH.tp(9, 1, 'e'); I().toolPress = true; GH.step(GH.TUNING.tools.bombFuse + 6);
+  out.crackOpen = GH.game.grid[1][10] === 0;
+  const coins0 = GH.game.coins;
+  GH.tp(10, 1, 'e'); I().atk = true; GH.step(2);
+  out.chestHeld = !!GH.game.hold;
+  GH.step(100);
+  out.chestCoins = GH.game.coins - coins0;
+
+  /* an arrow into the Cistern's eye switch reveals its chest */
+  begin(1, '0,2');
+  GH.grant('bow');
+  GH.tp(9, 2, 'n'); I().toolPress = true; GH.step(40);
+  out.eyeHit = !!GH.game.objs.find((o) => o.k === 'eye' && o.hit);
+  out.eyeChest = !!GH.game.objs.find((o) => o.k === 'chest' && o.hidden === 'eye' && o.shown);
+
+  /* a generated torch island: light every torch in its key room */
+  const isl = GH.islandCheck(3, 3)[0];
+  begin(3);
+  GH.room(GH.island.keyRoom); GH.game.foes.length = 0; GH.game.sealed = false;
+  const torches = GH.game.objs.filter((o) => o.k === 'torch');
+  for (const t of torches) {
+    const left = t.x < 6;
+    GH.tp(left ? t.x + 1 : t.x - 1, t.y, left ? 'w' : 'e');
+    I().atk = true; GH.step(24);
+  }
+  out.torches = torches.length;
+  out.torchSolved = !!GH.game.objs.find((o) => o.k === 'chest' && o.shown && o.hidden === 'puzzle');
+  out.island3Rooms = isl.rooms;
+
+  /* the warden leaves a light; picking it up ends the island */
+  begin(1, '1,0');
+  GH.game.foes.length = 0;
+  GH.game.foes.push(Object.assign({}, { type:'boss', x:6*16+8, y:3*16+8, vx:0, vy:0, hurt:0, t:1, hp:1, w:26, h:26, spd:0, dmg:0, state:'wait', cd:9999, spawned:0 }));
+  GH.tp(6, 4, 'n'); I().atk = true; GH.step(12);
+  const orb = GH.game.items.find((it) => it.type === 'orb');
+  out.orbDropped = !!orb;
+  if (orb) { GH.game.p.x = orb.x; GH.game.p.y = orb.y; GH.step(2); GH.step(100); }
+  out.won = !!GH.game.won;
+  out.lit1 = !!GH.prog.lit[1];
+  return out;
+}).catch((e) => ({ error: e.message }));
+if (mech.error) fails.push('mechanics test threw: ' + mech.error);
+else {
+  if (!mech.bushCut) fails.push('swinging at a bush did not cut it');
+  if (!mech.pushSolved) fails.push('pushing the Cache stone did not land it on the plate');
+  if (!mech.pushChest) fails.push('solving the push puzzle did not reveal its chest');
+  if (!mech.crackOpen) fails.push('a bomb did not open the cracked wall');
+  if (!mech.chestHeld) fails.push('opening a chest did not hold the item up');
+  if (!(mech.chestCoins >= 15)) fails.push(`the secret chest gave ${mech.chestCoins} coins, expected 15`);
+  if (!mech.eyeHit || !mech.eyeChest) fails.push('an arrow into the eye switch did not reveal its chest');
+  if (!(mech.torches >= 3) || !mech.torchSolved) fails.push(`lighting ${mech.torches} torches did not solve island 3's key room`);
+  if (!mech.orbDropped) fails.push('the warden did not drop its light');
+  if (!mech.won || !mech.lit1) fails.push('picking up the light did not finish the island');
+}
+
+/* the sitting clock survives a replay (it used to reset with every run) */
+const sit = await pg.evaluate(() => {
+  GH.sit.ms = 5000; GH.sit.done = false; GH.session.ended = true; GH.loadIsland(1); GH.play(); GH.freeze();
+  return GH.sit.ms;
+});
+if (!(sit >= 5000)) fails.push(`starting a new run reset the sitting clock to ${sit}`);
+
+/* the sea: pick island 2, sail, and arrive */
+const sail = await pg.evaluate(async () => {
+  const s = (ms) => new Promise((r) => setTimeout(r, ms));
+  GH.cfg.allIslands = true; GH.prog.lastIsland = 1;
+  GH.open('map'); await s(60);
+  GH.nav(1, 0); GH.confirm();
+  /* the sail is frame-counted, and a headless page can run well under 60 fps,
+     so wait for the arrival rather than for a fixed time */
+  for (let i = 0; i < 100 && !(GH.island && GH.island.id === 2 && GH.running); i++) await s(80);
+  GH.cfg.allIslands = false;
+  return { island: GH.island && GH.island.id, running: GH.running, menu: GH.menu.id };
+});
+if (sail.island !== 2 || !sail.running) fails.push(`sailing from the map landed on island ${sail.island} (menu "${sail.menu}")`);
+await pg.evaluate(() => { GH.freeze(); GH.loadIsland(1); GH.session.ended = true; });
+
 /* dev panel builds a control per numeric leaf (it lives in the flat panel) */
 await pg.evaluate(() => GH.flat());
 await pg.click('#btnDevTitle');
@@ -240,4 +364,4 @@ if (!rec.build) fails.push('session log has no build stamp');
 
 await browser.close();
 if (fails.length) { fails.forEach((f) => console.log('FAIL  ' + f)); console.log(`\n${fails.length} failure(s)`); process.exit(1); }
-console.log(`ok [${via}] — booted clean, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);
+console.log(`ok [${via}] — booted clean, ${islands.length} islands winnable, bush/stone/bomb/arrow/torch/light all work, sitting clock survives replay, sailed to island ${sail.island}, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);

@@ -35,11 +35,16 @@ src/                 concatenated in filename order — 20 runs before 40
   00-head.html       title, fonts, CSS
   10-panels.html     flat fallback panels + the generated tuning panel
   20-core.js         config, canvas, WebGL lens stage, dungeon tables
+  25-islands.js      the sea: island definitions, seeded generator, validator
   30-tuning.js       TUNING: every balance / therapy / audio / optics number
-  35-audio.js        synthesised sound effects — no asset files, no fetches
-  40-entities.js     enemies, physics, damage, the adaptive staircase
+  35-audio.js        synthesised sound effects and spoken prompts — no assets, no fetches
+  40-entities.js     update loop, enemies, damage, the adaptive staircase
+  42-world.js        grass, pots, stones, torches, sparkles, chests, cracks, eye switches
+  44-tools.js        shield, bombs, bow
+  46-owl.js          the companion
   50-render.js       per-eye rendering, contrast layers, calibration grid
   55-menu.js         the stereo menus and the child setup wizard
+  57-map.js          the sea map and the boat
   60-hud.js          HUD, nonius check, input (keyboard / gamepad / touch / tilt)
   70-ui.js           flow control, wake lock, game loop, boot
   80-dev.js          auto-generated tuning panel, session telemetry, GH console handle
@@ -148,6 +153,35 @@ inset — which is what made the end of a run feel like the controller had stopp
 
 Held upright, the app shows **turn the phone** instead of rendering. Orientation lock is
 refused more often than it is granted, and two tall slivers do not fuse into anything.
+
+## Islands, and what there is to do on them
+
+This grew into an Oceanhorn-style adventure because that is the game he loves, and the market
+dichoptic games lost him to boredom — compliance is what this whole thing lives or dies on.
+
+**The sea** is the hub: eight islands told apart by colour, a little boat that sails between
+them, and a beacon on every island whose light he has brought back. Islands open as he earns
+stars. Island 1 is the hand-built Gloamhold; the rest are generated from fixed seeds, so each
+island is the same every visit.
+
+**On an island** he cuts grass and smashes pots for coins and hearts, pushes stones onto plates,
+lights torches with his sword, digs where it sparkles, and opens chests — holding the find up
+over his head while the world pauses, which is the reward. Some rooms shut their doors until
+the monsters are beaten. The key room's puzzle hides either the warden's key or a **tool**:
+the shield on island 2, bombs on 3, the bow on 5. Bombs open cracked walls and the bow hits eye
+switches, so earlier islands keep secrets he can only reach later. The warden drops the
+island's light; picking it up finishes the island.
+
+**The owl** follows him, says the prompts out loud in Mongolian, and helps when he has been
+stuck for a while — by turning to look and speaking, never by putting a glow on the answer.
+
+**Why the layers matter here.** Everything he wants to find — plates, sparkles, cracks, eye
+switches, chests, coins — is drawn on the per-eye layers, faint in the stronger eye. So looking
+for treasure is the part that makes the weaker eye work, driven by curiosity rather than only
+by being chased. That is a design choice, not a claim about outcomes.
+
+Controls stay at two: **A** acts (swing, open, dig), **B** uses the tool in hand, a shoulder
+button swaps tools.
 
 ## Sound
 

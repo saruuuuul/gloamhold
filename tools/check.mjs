@@ -50,12 +50,15 @@ for (const id of referenced) {
 }
 
 /* 4 — the dichoptic invariants, as far as static checking can reach */
-const render = existsSync(join(SRC, '50-render.js')) ? read('50-render.js') : '';
-const hud = existsSync(join(SRC, '60-hud.js')) ? read('60-hud.js') : '';
-if (/globalCompositeOperation/.test(render + hud))
-  fail('globalCompositeOperation in a drawing file — alpha must stay linear or "contrast %" stops being true');
-if (/shadowBlur|createLinearGradient|createRadialGradient/.test(render))
-  warn('gradient or shadow in 50-render.js — check it is not on a signal layer, where it breaks the alpha/contrast relationship');
+/* drawing is spread across several files now (world, tools, owl, menus), so
+   the linear-alpha rules are checked everywhere, not just in 50-render.js */
+for (const n of jsNames) {
+  const s2 = read(n);
+  if (/globalCompositeOperation/.test(s2))
+    fail(`${n}: globalCompositeOperation — alpha must stay linear or "contrast %" stops being true`);
+  if (/shadowBlur|createLinearGradient|createRadialGradient/.test(s2))
+    warn(`${n}: gradient or shadow — check it is not on a signal layer, where it breaks the alpha/contrast relationship`);
+}
 
 const core = read('20-core.js');
 if (!/function alphaFor\s*\(/.test(core)) fail('alphaFor() is gone from 20-core.js');

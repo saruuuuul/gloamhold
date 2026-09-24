@@ -99,7 +99,20 @@ still looks fine, which is the worst kind of bug here.
    lens inset took 13% off each edge there was nothing left on screen to put a cursor on,
    which reads to a player as "the controller does not work here". Numbers for grown-ups go
    on `SCREENS.report`, never on a screen a five-year-old lands on.
-12. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
+12. **Which layer a thing is drawn on is a design decision, and it is written down.**
+   `world` (both eyes, full contrast): terrain, bushes, pots, stones, torches, the player, the
+   owl, bombs and arrows. `clue` (`alphaFor(eye,'clue')` — faint in the stronger eye, and
+   weak-eye-only in forced fusion): plates, sparkles, cracks, eye switches. `item`: chests,
+   coins, keys, anything you GET. The things he wants to find are on the per-eye layers so that
+   looking is driven by curiosity, not only by being chased. **Anything an object spawns
+   belongs to that object's layer** — death poofs are foe-layer, the "a chest appeared" burst
+   is item-layer. Both of those were once drawn at full contrast to both eyes, and each leaked
+   exactly the position the other eye was not supposed to have.
+13. **Clues change shape, never alpha.** A sparkle twinkles by growing its arms and a coin
+   glints by narrowing; neither ever modulates `globalAlpha`, because alpha IS the contrast
+   and an oscillating alpha would make "contrast %" a peak rather than a value. The owl's hint
+   follows the same rule: it turns to look and speaks — it never puts a glow on the clue.
+14. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
    Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
    `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name')`, which
    is a no-op until `audioUnlock()` has run on a real gesture.
@@ -110,15 +123,20 @@ still looks fine, which is the worst kind of bug here.
 |---|---|
 | `src/00-head.html` | `<title>`, Google Fonts link, all CSS |
 | `src/10-panels.html` | **Flat fallback** panels + the generated tuning panel. Not what you see in the viewer |
-| `src/20-core.js` | `cfg`, session `S`, canvas + WebGL lens stage, `alphaFor`, dungeon tables, room building |
+| `src/20-core.js` | `cfg`, session `S`, canvas + WebGL lens stage, `alphaFor` (incl. the `clue` layer), tiles, `HOME_ROOMS` (island 1), pure `roomGrid()`, `newGame(island)`, `enterRoom` |
+| `src/25-islands.js` | `ISLAND_DEFS`, seeded generator `genIsland(n)`, `islandProblems()` validator, unlock costs, `loadIsland` |
 | `src/30-tuning.js` | `TUNING` and its defaults, load/save/walk helpers |
 | `src/35-audio.js` | Synthesised sound: `audioUnlock`, `tone`/`hiss`, the `SFX` catalogue, `sfx(name)`; plus `SPEECH` / `say(key)` spoken prompts |
-| `src/40-entities.js` | Enemy behaviour, collision, damage, the adaptive staircase, doors |
+| `src/40-entities.js` | `update()` (the orchestrator), enemies, collision, damage, the staircase, the item-held-up moment, sealed doors |
+| `src/42-world.js` | Bushes, pots, stones and plates, torches, sparkles, chests, cracks, eye switches; their drawing |
+| `src/44-tools.js` | Shield, bombs, bow; tool input; their drawing |
+| `src/46-owl.js` | The companion: follows, speaks, hints when stuck |
 | `src/50-render.js` | Palette, per-eye render, sprites, calibration grid |
-| `src/55-menu.js` | Stereo menus: engine, `SCREENS`, icons, the child setup wizard, `PROG` stars/streak, the rotate prompt |
+| `src/55-menu.js` | Stereo menus: engine, `SCREENS`, icons, the child setup wizard, `PROG` (stars, coins, tools, lights, secrets), the rotate prompt |
+| `src/57-map.js` | The sea: island select, the boat, sailing |
 | `src/60-hud.js` | HUD, nonius check, keyboard / gamepad / touch / tilt input, menu input polling |
-| `src/70-ui.js` | Flow control (`startRun`/`resumeRun`/`doPause`), flat panel wiring, wake lock, game loop, `uiLoop`, boot |
-| `src/80-dev.js` | Auto-generated tuning panel, session telemetry, `window.GH` handle |
+| `src/70-ui.js` | Flow control (`startRun`/`resumeRun`/`doPause`), the sitting clock `SIT`, exposure telemetry, flat panel wiring, game loop, `uiLoop`, boot |
+| `src/80-dev.js` | Auto-generated tuning panel, session telemetry, `window.GH` handle (incl. `step`/`freeze`/`tp`/`room`/`islandCheck` for tests) |
 | `public/` | manifest, service worker, icons — copied to `dist/` with `__BUILD__` substituted |
 
 ## Domain notes
@@ -151,10 +169,26 @@ still looks fine, which is the worst kind of bug here.
   threshold from a game — do not let copy anywhere imply it is a clinical measurement, and do
   not move "which eye is weaker" into it: a child cannot answer that and a wrong answer trains
   the wrong eye.
-- **Dungeon.** 3×3 room grid in `ROOMS` (`20-core.js`), keyed `"col,row"`, row 0 at the top.
-  Required path: start `1,2` → `0,2` → `0,1` → `0,0` (warden's key) → `1,1` → boss `1,0`.
-  The small key in `2,1` unlocks `2,0` for an optional heart vessel. Adding a room means an
-  entry in `ROOMS`, matching `doors` letters on both sides, and a `PATTERNS` layout.
+- **Island 1.** 3×3 grid in `HOME_ROOMS` (`20-core.js`), keyed `"col,row"`, row 0 at the top.
+  Shortest path: start `1,2` → `1,1` → `0,1` → `0,0` (warden's key) → back → boss `1,0` — the
+  Cistern is NOT required. The small key in `2,1` opens the Cache, whose stone puzzle holds a
+  heart vessel. Secrets: a sparkle in the Threshold, a bomb alcove in the Rookery, an eye switch
+  in the Cistern. Nine of its enemies used to spawn inside pattern walls; `islandProblems()`
+  now rejects any spawn on a solid tile, on every island, so that cannot return.
+- **The sea.** Eight islands (`ISLAND_DEFS`), told apart by colour because he cannot read.
+  2–8 are generated from a FIXED seed (`n*7919 + attempt*104729`) — the same island every time,
+  so a cracked wall he walked past is still there when he comes back with bombs. Island 2 holds
+  the shield, 3 the bombs, 5 the bow, in the key room's puzzle chest. Islands unlock by total
+  stars (`islandCost`). The warden drops the island's light; picking it up finishes the island
+  and lights its beacon on the map. `islandProblems()` is the gate: matching doors, no spawn in a
+  wall, clear push lanes, and the warden reachable once the keys you can reach are used.
+- **The sitting.** `SIT` in `70-ui.js` spans every run until the sitting ends. When time is up
+  it waits for a natural break — a room cleared, a door walked through, an island done — or
+  `session.graceMinutes`, whichever first, and never ends mid-fight. It used to be the run's own
+  clock, zeroed by `newGame()`, so the planned ending almost never fired.
+- **Exposure telemetry.** The session log's `exposure` block says how many seconds each per-eye
+  layer had something on it. It is not an outcome measure — only whether the game is giving the
+  weaker eye anything to do. Read it that way, and never present it as more.
 
 ## Gotchas already paid for
 
@@ -179,6 +213,21 @@ still looks fine, which is the worst kind of bug here.
 - **Death poofs and hit sparks draw INSIDE the foe alpha block.** They were outside it,
   at full contrast to both eyes, which told the stronger eye exactly where an enemy it is not
   allowed to see had just died. Anything spawned by a foe belongs to the foe layer.
+- `roomGrid(spec, state)` is pure. The generator validates candidate rooms through it, so never
+  give it a dependency on `G` or on live state.
+- **Stones never enter the outer ring** (`blockCanEnter`): every doorway is there, and a stone in
+  a doorway is a room you cannot leave. With that rule an empty-pattern room can never jam a
+  stone — the player can always reach its far side. A stone that solved its puzzle is locked to
+  its plate.
+- **Arrows hit the tile AHEAD of their centre.** Collision is on the leading edge; looking the
+  tile up from the centre reported the tile in front of the eye switch, and no bow secret could
+  open. `worldArrowHit` is called with the offset tile for that reason.
+- **Tests drive the simulation with `GH.freeze()` then `GH.step(n)`.** If the live loop keeps
+  running, `gatherInput()` overwrites whatever the test put into `input` every frame.
+- **Headless pages can run well under 60 fps**, and the sail is frame-counted. Poll for the
+  outcome; never wait a fixed number of milliseconds for a frame-counted thing.
+- **Source files contain literal `·`, `→`, `★`, `‹ ›`.** A patch that matches on the `\u00b7`
+  escape instead of the character silently fails to apply — match the character.
 - **Portrait is refused, not rendered.** `renderScene()` draws `drawRotatePrompt()` and
   returns whenever `VH > VW`. Orientation lock is denied far more often than granted, and two
   tall slivers fuse into nothing. It is deliberately not stereo — there is nothing worth

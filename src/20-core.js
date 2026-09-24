@@ -16,7 +16,7 @@ var WW = RW*TS, WH = RH*TS;
 var cfg = { weakEye:'right', strong:0.40, mode:'rebalance', adapt:true, sep:0, zoom:1.0, tilt:false,
             lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false,
             mute:false, flat:false, kidSet:false,
-            kidMode:true, speakLang:'mn' };
+            kidMode:true, speakLang:'mn', allIslands:false };
 try{ var raw = localStorage.getItem('gloamhold.cfg'); if(raw){ var o=JSON.parse(raw); for(var k in cfg) if(k in o) cfg[k]=o[k]; } }catch(e){}
 function saveCfg(){ try{ localStorage.setItem('gloamhold.cfg', JSON.stringify(cfg)); }catch(e){} }
 
@@ -137,9 +137,16 @@ function alphaFor(eye, layer){
   if(cfg.mode==='split'){
     if(layer==='foe')  return weak?1:0;
     if(layer==='item') return weak?0:Math.max(s, TUNING.therapy.splitItemFloor);
+    /* clues — plates, sparkles, cracks, eye switches — are the things worth
+       finding, so in forced fusion they belong to the eye doing the work */
+    if(layer==='clue') return weak?1:0;
   }
   return weak?1:s;
 }
+
+/* ---------------- tiles ---------------- */
+var T_FLOOR = 0, T_WALL = 1, T_DOOR = 3, T_LOCK = 4, T_BUSH = 5, T_POT = 6, T_CRACK = 9;
+function tileSolid(t){ return t === T_WALL || t === 2 || t === T_LOCK || t === T_BUSH || t === T_POT || t === T_CRACK; }
 
 /* ---------------- dungeon ---------------- */
 function blank(){ var g=[],y,x; for(y=0;y<RH;y++){ g.push([]); for(x=0;x<RW;x++) g[y].push( (x===0||y===0||x===RW-1||y===RH-1) ? 1 : 0 ); } return g; }
@@ -147,55 +154,87 @@ var CC = 6, CR = 5; // centre col / row
 
 var PATTERNS = {
   empty: function(){},
-  pillars: function(g){ var ps=[[3,3],[9,3],[3,7],[9,7]]; ps.forEach(function(p){ g[p[1]][p[0]]=1; g[p[1]][p[0]+0]=1; g[p[1]+1][p[0]]=1; }); },
+  pillars: function(g){ var ps=[[3,3],[9,3],[3,7],[9,7]]; ps.forEach(function(p){ g[p[1]][p[0]]=1; g[p[1]+1][p[0]]=1; }); },
   cross: function(g){ for(var x=4;x<=8;x++){ if(x!==6){ g[3][x]=1; g[7][x]=1; } } g[5][2]=1; g[5][10]=1; },
   ring: function(g){ var i; for(i=4;i<=8;i++){ g[3][i]=1; g[7][i]=1; } for(i=4;i<=6;i++){ g[i][4]=1; g[i][8]=1; } g[5][4]=0; g[5][8]=0; },
   maze: function(g){ var y; for(y=2;y<=4;y++) g[y][4]=1; for(y=6;y<=8;y++) g[y][4]=1; for(y=2;y<=4;y++) g[y][8]=1; for(y=6;y<=8;y++) g[y][8]=1; g[2][6]=1; g[8][6]=1; }
 };
 
-var ROOMS = {
-  '1,2':{ name:'Threshold',       doors:'new',  pat:'empty',   foes:[['grub',6,3]] },
-  '0,2':{ name:'The Cistern',     doors:'ne',   pat:'pillars', foes:[['grub',3,5],['grub',9,5],['grub',6,8]], drop:'heart' },
-  '2,2':{ name:'Rookery',         doors:'nw',   pat:'ring',    foes:[['bat',4,3],['bat',8,3],['bat',6,7]] },
-  '1,1':{ name:'The Crossing',    doors:'nsew', pat:'cross',   foes:[['bat',3,3],['bat',9,7],['grub',6,5]], lock:{n:'boss'} },
-  '0,1':{ name:'Watchpost',       doors:'nse',  pat:'pillars', foes:[['sentry',3,3],['sentry',9,7],['grub',6,5]] },
-  '2,1':{ name:'Long Gallery',    doors:'nsw',  pat:'maze',    foes:[['sentry',6,2],['bat',3,6],['bat',9,6],['grub',6,8]], lock:{n:'small'}, drop:'smallkey' },
-  '0,0':{ name:'Reliquary',       doors:'s',    pat:'ring',    foes:[['sentry',4,3],['sentry',8,3],['grub',4,7],['grub',8,7]], drop:'bosskey' },
-  '2,0':{ name:'The Cache',       doors:'s',    pat:'empty',   foes:[], drop:'vessel', dropNow:true },
-  '1,0':{ name:"Warden's Floor",  doors:'s',    pat:'empty',   foes:[['boss',6,3]] }
+/* Island 1, hand-built. Nine of its enemies used to spawn INSIDE pattern walls
+   (every Rookery and Reliquary foe sat on the ring's wall tiles), frozen in the
+   stone and harmless. They are on floor tiles now, and tests/smoke.mjs checks
+   every spawn on every island so it cannot come back. */
+var HOME_ROOMS = {
+  '1,2':{ name:'Threshold',       doors:'new',  pat:'empty',   foes:[['grub',6,3]],
+          deco:[['bush',1,1],['bush',2,1],['bush',1,2],['bush',11,1],['bush',10,1],['pot',11,2],['bush',1,9],['bush',1,8],['pot',11,9],['bush',10,9]],
+          objs:[{k:'sparkle', x:3, y:8, secret:true}] },
+  '0,2':{ name:'The Cistern',     doors:'ne',   pat:'pillars', foes:[['grub',3,5],['grub',9,5],['grub',6,8]], drop:'heart',
+          deco:[['pot',1,1],['pot',2,1],['pot',1,9],['pot',2,9],['pot',11,9]],
+          objs:[{k:'eye', x:9, y:0}, {k:'chest', x:10, y:1, item:'coins', amount:15, hidden:'eye', secret:true}] },
+  '2,2':{ name:'Rookery',         doors:'nw',   pat:'ring',    foes:[['bat',3,2],['bat',9,2],['bat',6,8]],
+          walls:[[11,2],[10,2]],
+          deco:[['bush',1,9],['bush',2,9],['bush',1,8]],
+          objs:[{k:'crack', x:10, y:1}, {k:'chest', x:11, y:1, item:'coins', amount:15, secret:true}] },
+  '1,1':{ name:'The Crossing',    doors:'nsew', pat:'cross',   foes:[['bat',3,3],['bat',9,7],['grub',6,5]], lock:{n:'boss'},
+          deco:[['pot',1,1],['pot',11,1],['pot',1,9],['pot',11,9]] },
+  '0,1':{ name:'Watchpost',       doors:'nse',  pat:'pillars', foes:[['sentry',2,3],['sentry',10,7],['grub',6,5]],
+          deco:[['bush',1,1],['bush',1,9],['bush',11,1]] },
+  '2,1':{ name:'Long Gallery',    doors:'nsw',  pat:'maze',    foes:[['sentry',6,3],['bat',3,6],['bat',9,6],['grub',6,7]], lock:{n:'small'}, drop:'smallkey' },
+  '0,0':{ name:'Reliquary',       doors:'s',    pat:'ring',    foes:[['sentry',4,2],['sentry',8,2],['grub',4,8],['grub',8,8]], drop:'bosskey' },
+  '2,0':{ name:'The Cache',       doors:'s',    pat:'empty',   foes:[], puzzle:'push',
+          deco:[['pot',1,1],['pot',11,1],['pot',1,9]],
+          objs:[{k:'block', x:4, y:4}, {k:'plate', x:4, y:7}, {k:'chest', x:8, y:4, item:'vessel', hidden:'puzzle'}] },
+  '1,0':{ name:"Warden's Floor",  doors:'s',    pat:'empty',   foes:[['boss',6,3]], boss:true }
 };
+var ROOMS = HOME_ROOMS;
 var DIRV = { n:[0,-1], s:[0,1], e:[1,0], w:[-1,0] };
 
-var roomState = {}; // key -> {cleared:bool, taken:bool, unlocked:{}}
-function rs(key){ if(!roomState[key]) roomState[key]={cleared:false, taken:false, unlocked:{}}; return roomState[key]; }
+var roomState = {};
+function rs(key){
+  if(!roomState[key]) roomState[key] = { cleared:false, taken:false, unlocked:{},
+    cut:{}, cracked:{}, opened:{}, dug:{}, lit:{}, solved:false, eyeHit:false, blocks:null };
+  return roomState[key];
+}
 
-function buildGrid(key){
-  var spec = ROOMS[key], g = blank(), i;
+/* Pure: a spec plus its saved state gives a tile grid. The island generator
+   validates candidate rooms through this without touching live game state. */
+function roomGrid(spec, st){
+  var g = blank(), i;
   PATTERNS[spec.pat](g);
-  var st = rs(key);
+  (spec.walls || []).forEach(function(w){ g[w[1]][w[0]] = T_WALL; });
+  (spec.deco || []).forEach(function(d){
+    if(st && st.cut[d[1] + ',' + d[2]]) return;
+    g[d[2]][d[1]] = d[0] === 'pot' ? T_POT : T_BUSH;
+  });
+  (spec.objs || []).forEach(function(o){
+    if(o.k === 'crack') g[o.y][o.x] = (st && st.cracked[o.x + ',' + o.y]) ? T_FLOOR : T_CRACK;
+  });
   'nsew'.split('').forEach(function(d){
-    if(spec.doors.indexOf(d)<0) return;
-    var locked = spec.lock && spec.lock[d] && !st.unlocked[d];
-    var t = locked?4:3;
-    if(d==='n') for(i=CC-1;i<=CC+1;i++) g[0][i]=t;
-    if(d==='s') for(i=CC-1;i<=CC+1;i++) g[RH-1][i]=t;
-    if(d==='w') for(i=CR-1;i<=CR+1;i++) g[i][0]=t;
-    if(d==='e') for(i=CR-1;i<=CR+1;i++) g[i][RW-1]=t;
+    if(spec.doors.indexOf(d) < 0) return;
+    var locked = spec.lock && spec.lock[d] && !(st && st.unlocked[d]);
+    var t = locked ? T_LOCK : T_DOOR;
+    if(d === 'n') for(i=CC-1;i<=CC+1;i++) g[0][i] = t;
+    if(d === 's') for(i=CC-1;i<=CC+1;i++) g[RH-1][i] = t;
+    if(d === 'w') for(i=CR-1;i<=CR+1;i++) g[i][0] = t;
+    if(d === 'e') for(i=CR-1;i<=CR+1;i++) g[i][RW-1] = t;
   });
   return g;
 }
+function buildGrid(key){ return roomGrid(ROOMS[key], rs(key)); }
 
 /* ---------------- game state ---------------- */
 var G = null;
 function kidMaxHp(){
   return TUNING.player.maxHp + (cfg.kidMode ? TUNING.session.extraHearts * 2 : 0);
 }
-function newGame(){
+function newGame(islandId){
+  loadIsland(islandId || CUR_ISLAND || 1);
   G = {
-    key:'1,2', grid:null, spec:null,
+    key:ISLAND.start, grid:null, spec:null,
     p:{ x:WW/2, y:WH/2+30, w:11, h:11, vx:0, vy:0, face:'n', hp:kidMaxHp(), maxhp:kidMaxHp(), inv:0, atk:0, flash:0 },
-    foes:[], shots:[], items:[], fx:[],
-    keys:0, bossKey:false, cleanRoom:true,
+    foes:[], shots:[], items:[], fx:[], objs:[], bombs:[], arrows:[],
+    keys:0, bossKey:false, cleanRoom:true, coins:0, tool:firstTool(), toolCd:0, hold:null,
+    sealed:false, pushT:0, pushDir:null,
     fade:0, fadeDir:0, pending:null, won:false, dead:false, t:0
   };
   /* stats are cleared BEFORE the first room is entered, so the opening room
@@ -203,21 +242,24 @@ function newGame(){
   S.started = performance.now(); S.elapsed=0; S.rooms=0; S.cleanRooms=0; S.hits=0; S.kills=0;
   S.trail=[]; S.checks=[]; S.roomLog=[]; S.stepsDown=0; S.stepsUp=0; S.ended=false; S.won=false;
   S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false; S.awarded=false;
+  S.coins=0; S.secrets=0; S.firstLight=false; S.sig={ foe:0, item:0, clue:0, any:0 };
   roomState = {};
-  enterRoom('1,2', null);
+  enterRoom(ISLAND.start, null);
   logContrast();
 }
 
 function enterRoom(key, fromDir){
   G.key = key; G.spec = ROOMS[key]; G.grid = buildGrid(key);
-  G.foes = []; G.shots = []; G.items = []; G.fx = [];
+  G.foes = []; G.shots = []; G.items = []; G.fx = []; G.bombs = []; G.arrows = [];
   var st = rs(key);
   if(!st.cleared){
-    (G.spec.foes||[]).forEach(function(f){ G.foes.push(mkFoe(f[0], f[1]*TS+TS/2, f[2]*TS+TS/2)); });
+    (G.spec.foes||[]).forEach(function(f){ G.foes.push(mkFoe(f[0], f[1]*TS+TS/2, f[2]*TS+TS/2, f[3])); });
   }
   if(G.spec.drop && !st.taken && (st.cleared || G.spec.dropNow)) spawnDrop(key);
   if(G.foes.length===0){ st.cleared = true; }
   G.cleanRoom = true; G.stepUps = 0;
+  G.sealed = !!(G.spec.seal && G.foes.length);
+  worldEnterRoom(st);
   if(fromDir){
     var p=G.p;
     if(fromDir==='n'){ p.x=CC*TS+TS/2; p.y=WH-TS-6; p.face='n'; }
@@ -229,6 +271,8 @@ function enterRoom(key, fromDir){
   S.rooms++;
   S.roomLog.push({ room:key, name:G.spec.name, inAt:Math.round(S.elapsed/1000),
                    foes:G.foes.length, hitsBefore:S.hits, contrast:+cfg.strong.toFixed(2) });
+  owlEnterRoom();
+  sittingBreakpoint();
 }
 function spawnDrop(key){
   var k = ROOMS[key].drop;

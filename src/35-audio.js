@@ -139,7 +139,27 @@ var SFX = {
   target:  function(){ tone({ f:990, dur:0.09, type:'sine', v:0.16 }, 'ui'); },
   star:    function(){ arp([1200, 1600, 2100], 0.05, { dur:0.1, type:'sine', v:0.24 }, 'ui'); },
   oops:    function(){ tone({ f:300, to:220, dur:0.14, type:'triangle', v:0.16 }, 'ui'); },
-  fanfare: function(){ arp([523, 659, 784, 1047, 1319], 0.1, { dur:0.22, type:'triangle', v:0.26 }, 'ui'); }
+  fanfare: function(){ arp([523, 659, 784, 1047, 1319], 0.1, { dur:0.22, type:'triangle', v:0.26 }, 'ui'); },
+
+  /* the world */
+  cut:     function(){ hiss({ hz:2600, dur:0.06, v:0.16, q:0.9 }, 'game'); tone({ f:700, to:420, dur:0.04, type:'triangle', v:0.08 }, 'game'); },
+  pot:     function(){ hiss({ hz:1400, dur:0.1, v:0.2, q:2 }, 'game'); tone({ f:900, to:500, dur:0.06, type:'square', v:0.1 }, 'game'); },
+  coin:    function(){ tone({ f:1320, dur:0.04, type:'square', v:0.12 }, 'game'); tone({ f:1760, dur:0.07, type:'square', v:0.12, delay:0.04 }, 'game'); },
+  chest:   function(){ arp([392, 523, 659, 784, 1047], 0.08, { dur:0.18, type:'triangle', v:0.26 }, 'game'); },
+  push:    function(){ hiss({ hz:260, dur:0.16, v:0.2, type:'lowpass' }, 'game'); },
+  puzzle:  function(){ arp([659, 784, 988, 1319], 0.07, { dur:0.14, type:'sine', v:0.24 }, 'game'); },
+  dig:     function(){ hiss({ hz:500, dur:0.12, v:0.2, type:'lowpass' }, 'game'); arp([880, 1175], 0.06, { dur:0.08, type:'square', v:0.12 }, 'game'); },
+  light:   function(){ hiss({ hz:3000, dur:0.14, v:0.12, q:0.7 }, 'game'); tone({ f:520, to:880, dur:0.12, type:'sine', v:0.12 }, 'game'); },
+  rumble:  function(){ tone({ f:90, to:45, dur:0.5, type:'sawtooth', v:0.24 }, 'game'); hiss({ hz:180, dur:0.5, v:0.2, type:'lowpass' }, 'game'); },
+
+  /* tools */
+  bombSet: function(){ tone({ f:300, dur:0.05, type:'square', v:0.14 }, 'game'); hiss({ hz:5000, dur:0.3, v:0.05, q:0.5 }, 'game'); },
+  boom:    function(){ tone({ f:120, to:30, dur:0.5, type:'sawtooth', v:0.34 }, 'game'); hiss({ hz:400, dur:0.45, v:0.34, type:'lowpass' }, 'game'); },
+  arrow:   function(){ hiss({ hz:3200, dur:0.08, v:0.12, q:1.5 }, 'game'); tone({ f:900, to:1400, dur:0.06, type:'triangle', v:0.08 }, 'game'); },
+  block:   function(){ tone({ f:1100, to:700, dur:0.06, type:'square', v:0.14 }, 'game'); },
+
+  /* the sea */
+  sail:    function(){ hiss({ hz:700, dur:0.9, v:0.14, type:'lowpass' }, 'ui'); arp([392, 494, 587], 0.16, { dur:0.25, type:'triangle', v:0.2 }, 'ui'); }
 };
 
 function sfx(name){
@@ -168,7 +188,32 @@ var SPEECH = {
   ready:   { mn:'Бэлэн боллоо. Тоглоцгооё!',              en:'All set. Let us play!' },
   again:   { mn:'Дахиад нэг тоглоцгооё.',                 en:'Let us try that again.' },
   soon:    { mn:'Бага зэрэг үлдлээ.',                     en:'Nearly finished.' },
-  done:    { mn:'Өнөөдрийн тоглоом дууслаа. Сайн тоглолоо!', en:'Today is done. Well played!' }
+  done:    { mn:'Өнөөдрийн тоглоом дууслаа. Сайн тоглолоо!', en:'Today is done. Well played!' },
+
+  /* the owl, in the dungeon */
+  push:    { mn:'Чулууг дугуй дээр түлх.',                  en:'Push the stone onto the circle.' },
+  torch:   { mn:'Бүх бамбарыг сэлмээрээ асаа.',             en:'Light every torch with your sword.' },
+  sealed:  { mn:'Хаалга хаагдлаа! Бүх мангасыг ял.',        en:'The doors closed! Beat all the monsters.' },
+  sparkle: { mn:'Гялалзсан газрыг ухаарай!',                en:'Dig where it sparkles!' },
+  careful: { mn:'Болгоомжтой!',                             en:'Careful!' },
+  chest:   { mn:'Эрдэнэс оллоо!',                           en:'You found treasure!' },
+  key:     { mn:'Түлхүүр оллоо!',                           en:'You found a key!' },
+  heart:   { mn:'Зүрх оллоо!',                              en:'You found a heart!' },
+  shield:  { mn:'Бамбай оллоо! Хоёр дахь товчоор бамбайгаа өргө.', en:'You found the shield! Hold the second button to raise it.' },
+  bombs:   { mn:'Тэсрэх бөмбөг оллоо! Хагарсан ханыг дэлбэл.', en:'You found the bombs! Blow up cracked walls.' },
+  bow:     { mn:'Нум сум оллоо! Хананы нүдийг харваарай.',   en:'You found the bow! Shoot the eyes in the walls.' },
+  orb:     { mn:'Гэрэл оллоо! Арал дахин гэрэлтлээ.',        en:'You found the light! The island shines again.' },
+  secret:  { mn:'Нууц зам нээгдлээ!',                       en:'A secret way opened!' },
+  solved:  { mn:'Сайн байна! Нэг юм нээгдлээ.',             en:'Well done! Something opened.' },
+  look:    { mn:'Эргэн тойрноо сайн хараарай.',             en:'Look around carefully.' },
+  reset:   { mn:'Гараад буцаж орвол чулуунууд байрандаа очно.', en:'Go out and back in to put the stones back.' },
+  crack:   { mn:'Энэ хана хагарсан байна. Бөмбөг тавиад үз.', en:'That wall is cracked. Try a bomb.' },
+  eye:     { mn:'Хананд нүд байна. Сумаар харваарай.',      en:'There is an eye in the wall. Shoot it.' },
+  rest:    { mn:'Энэ өрөөний дараа амарцгаая.',             en:'Let us rest after this room.' },
+
+  /* the sea */
+  sail:    { mn:'Далайд гарцгаая!',                         en:'Let us set sail!' },
+  more_stars: { mn:'Илүү од цуглуулаарай.',                 en:'Collect more stars first.' }
 };
 
 function speechVoices(){
@@ -188,9 +233,10 @@ function speechStatus(){
   if(cfg.speakLang === 'off') return 'off';
   return speechVoiceFor(cfg.speakLang) ? 'ready' : 'no voice';
 }
-function say(key){
+function say(key){ sayLine(SPEECH[key]); }
+/* for lines built at runtime, like "let's sail to Blue Isle" */
+function sayLine(line){
   if(cfg.mute || cfg.speakLang === 'off') return;
-  var line = SPEECH[key];
   if(!line) return;
   try{
     if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;

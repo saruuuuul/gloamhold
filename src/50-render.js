@@ -71,13 +71,27 @@ function drawEye(eye){
   ctx.save();
   ctx.translate(g.ox, g.oy); ctx.scale(s,s);
 
+  /* world: tiles, bushes, pots */
   drawRoom(eye);
+  /* clue: plates, sparkles, cracks, eyes — under the stones that sit on plates */
+  var aClue = alphaFor(eye,'clue');
+  if(aClue>0){ ctx.globalAlpha = aClue; drawClueObjs(); ctx.globalAlpha = 1; }
+  /* world again: stones, torches, debris */
+  drawWorldObjs();
+  drawWorldFx();
 
   var aItem = alphaFor(eye,'item');
-  if(aItem>0){ ctx.globalAlpha = aItem; G.items.forEach(drawItem); drawLocks(); ctx.globalAlpha=1; }
+  if(aItem>0){
+    ctx.globalAlpha = aItem;
+    drawChests(); G.items.forEach(drawItem); drawLocks(); drawItemFx();
+    if(G.hold) drawHeld();
+    ctx.globalAlpha=1;
+  }
 
   drawSwing();
   drawPlayer();
+  drawTools();
+  drawOwl();
 
   var aFoe = alphaFor(eye,'foe');
   if(aFoe>0){
@@ -101,37 +115,56 @@ function tileAt(x,y){
   if(x<0||y<0||x>=RW||y>=RH) return 1;
   return G.grid[y][x];
 }
+/* each island has its own stone and floor; home uses the base palette */
+function roomPal(){ return (ISLAND && ISLAND.pal) || C; }
 function drawRoom(eye){
   /* Overfill: the lens warp pulls in content from beyond the room, so the
      surrounding rock is drawn too rather than leaving black corners. */
   var over = (cfg.lens==='off' || !gl) ? 0 : 9;
-  var x,y,t;
-  ctx.fillStyle = C.stoneDk; ctx.fillRect(-over*TS, -over*TS, WW+over*TS*2, WH+over*TS*2);
-  ctx.fillStyle = C.floor; ctx.fillRect(0,0,WW,WH);
+  var x,y,t, P = roomPal();
+  ctx.fillStyle = P.stoneDk; ctx.fillRect(-over*TS, -over*TS, WW+over*TS*2, WH+over*TS*2);
+  ctx.fillStyle = P.floor; ctx.fillRect(0,0,WW,WH);
   for(y=-over;y<RH+over;y++) for(x=-over;x<RW+over;x++){
     t = tileAt(x,y);
     var px=x*TS, py=y*TS;
-    if(t===0 || t===3){
-      if(((x+y)&1)===0){ ctx.fillStyle=C.floor2; ctx.fillRect(px,py,TS,TS); }
+    if(t===T_FLOOR || t===T_DOOR || t===T_BUSH || t===T_POT){
+      if(((x+y)&1)===0){ ctx.fillStyle=P.floor2; ctx.fillRect(px,py,TS,TS); }
       var h=hash2(x+G.key.charCodeAt(0)*7, y+G.key.charCodeAt(2)*11);
-      if(h>0.86){ ctx.fillStyle=C.speck; ctx.fillRect(px+((h*10)|0)+3, py+((h*100)%9|0)+3, 2, 2); }
-      if(t===3){ ctx.fillStyle=C.arch; ctx.fillRect(px,py,TS,TS); ctx.fillStyle='#10161f'; ctx.fillRect(px+2,py+2,TS-4,TS-4); }
-    } else if(t===1 || t===4){
+      if(h>0.86){ ctx.fillStyle=P.speck; ctx.fillRect(px+((h*10)|0)+3, py+((h*100)%9|0)+3, 2, 2); }
+      if(t===T_DOOR){
+        ctx.fillStyle=P.arch; ctx.fillRect(px,py,TS,TS); ctx.fillStyle='#10161f'; ctx.fillRect(px+2,py+2,TS-4,TS-4);
+        if(G.sealed){
+          ctx.fillStyle = '#5a6076';
+          ctx.fillRect(px+2,py+1,2,TS-2); ctx.fillRect(px+7,py+1,2,TS-2); ctx.fillRect(px+12,py+1,2,TS-2);
+        }
+      } else if(t===T_BUSH){
+        ctx.fillStyle = '#1f3d22'; ctx.fillRect(px+1,py+3,TS-2,TS-4);
+        ctx.fillStyle = '#3f7a44'; ctx.fillRect(px+2,py+2,TS-4,TS-6);
+        ctx.fillStyle = '#5d9257'; ctx.fillRect(px+4,py+3,3,3); ctx.fillRect(px+9,py+5,3,3);
+      } else if(t===T_POT){
+        ctx.fillStyle = '#0b1016'; ctx.fillRect(px+3,py+TS-3,TS-6,2);
+        ctx.fillStyle = '#7a5a3a'; ctx.fillRect(px+3,py+4,TS-6,TS-7);
+        ctx.fillStyle = '#9c7650'; ctx.fillRect(px+4,py+5,3,TS-9);
+        ctx.fillStyle = '#4a3422'; ctx.fillRect(px+5,py+2,TS-10,3);
+      }
+    } else if(t===T_WALL || t===T_LOCK || t===T_CRACK){
       var out = (x<0||y<0||x>=RW||y>=RH);
-      ctx.fillStyle = C.stoneDk; ctx.fillRect(px,py,TS,TS);
-      ctx.fillStyle = out ? '#2b3145' : C.stone;   ctx.fillRect(px,py+3,TS-1,TS-4);
-      ctx.fillStyle = out ? '#3f465f' : C.stoneTop;ctx.fillRect(px,py,TS-1,3);
-      /* a few courses of blockwork so walls read as masonry, not as a slab */
-      if(!out && ((x*3+y) % 4) === 0){
-        ctx.fillStyle = '#2f364c'; ctx.fillRect(px+1, py+6, TS-3, 1);
+      ctx.fillStyle = P.stoneDk; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle = out ? '#2b3145' : P.stone;   ctx.fillRect(px,py+3,TS-1,TS-4);
+      ctx.fillStyle = out ? '#3f465f' : P.stoneTop;ctx.fillRect(px,py,TS-1,3);
+      /* a few courses of blockwork so walls read as masonry, not as a slab —
+         never on a crack tile, whose flat face is the ground the crack clue
+         is composited over */
+      if(!out && t!==T_CRACK && ((x*3+y) % 4) === 0){
+        ctx.fillStyle = P.stoneDk; ctx.fillRect(px+1, py+6, TS-3, 1);
       }
       ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(px+TS-1,py,1,TS); ctx.fillRect(px,py+TS-1,TS,1);
       /* Sconce: lit wall, but deliberately NO pool of light on the floor. A
          gradient down there would make floor luminance vary from tile to tile,
          and "contrast against the floor" would stop being a single number. */
-      if(!out && y < RH-1 && tileAt(x, y+1) === 0){
+      if(!out && t===T_WALL && y < RH-1 && tileAt(x, y+1) === T_FLOOR){
         var hs = hash2(x*13 + G.key.charCodeAt(0), y*7 + G.key.charCodeAt(2));
-        if(hs > 0.80){
+        if(hs > 0.80 && !objAt(x, y)){
           var fl = ((G.t >> 3) + x) & 1;
           ctx.fillStyle = '#4a3c22'; ctx.fillRect(px+7, py+9, 2, 4);
           ctx.fillStyle = C.gold;    ctx.fillRect(px+6, py+5+fl, 4, 4);
@@ -144,7 +177,7 @@ function drawRoom(eye){
 function drawLocks(){
   var x,y;
   for(y=0;y<RH;y++) for(x=0;x<RW;x++){
-    if(G.grid[y][x]!==4) continue;
+    if(G.grid[y][x]!==T_LOCK) continue;
     ctx.fillStyle = C.gold;
     ctx.fillRect(x*TS+6, y*TS+5, 4, 4);
     ctx.fillRect(x*TS+7, y*TS+9, 2, 3);
@@ -155,11 +188,40 @@ function drawItem(it){
   var b = Math.sin(it.bob)*1.5, x=it.x, y=it.y+b;
   if(it.type==='heart'){ heartShape(x,y,C.blood); }
   else if(it.type==='vessel'){ heartShape(x,y,C.blood); ctx.strokeStyle=C.gold; ctx.lineWidth=1; ctx.strokeRect(x-7,y-7,14,14); }
+  else if(it.type==='coin'){
+    /* the glint is a shape change, never an alpha change */
+    var w = ((G.t + (it.bob*10|0)) % 40) < 6 ? 2 : 4;
+    ctx.fillStyle = '#8a6a1c'; ctx.fillRect(x-w/2, y-3, w+1, 6);
+    ctx.fillStyle = C.gold;    ctx.fillRect(x-w/2, y-3, w, 5);
+    ctx.fillStyle = C.bone;    ctx.fillRect(x-w/2+1, y-2, 1, 2);
+  }
+  else if(it.type==='coins'){
+    ctx.fillStyle = '#8a6a1c'; ctx.fillRect(x-6,y-1,12,5);
+    ctx.fillStyle = C.gold; ctx.fillRect(x-5,y-3,4,4); ctx.fillRect(x-1,y-5,4,4); ctx.fillRect(x+2,y-2,4,4);
+    ctx.fillStyle = C.bone; ctx.fillRect(x,y-4,1,2);
+  }
+  else if(it.type==='orb'){
+    var r = 5 + (((G.t>>3)&1));
+    ctx.fillStyle = C.gold; ctx.fillRect(x-r, y-1, r*2, 2); ctx.fillRect(x-1, y-r, 2, r*2);
+    ctx.fillStyle = '#f4e3b0'; ctx.fillRect(x-3, y-3, 6, 6);
+    ctx.fillStyle = C.bone; ctx.fillRect(x-1, y-1, 2, 2);
+  }
+  else if(it.type==='shield' || it.type==='bombs' || it.type==='bow'){ drawToolIcon(it.type, x, y, 1.3); }
   else {
     ctx.fillStyle = it.type==='bosskey' ? C.violet : C.gold;
     ctx.fillRect(x-2,y-6,4,8); ctx.fillRect(x-4,y+2,8,3); ctx.fillRect(x+1,y+5,4,2);
     ctx.fillStyle = C.bone; ctx.fillRect(x-1,y-5,2,2);
   }
+}
+/* the thing he just found, held up over his head (item layer) */
+function drawHeld(){
+  var p = G.p, y = p.y - 22, i;
+  ctx.fillStyle = C.gold;
+  for(i=0;i<8;i++){
+    var a = i*0.785 + G.t*0.05, r = 11 + ((G.t % 20) < 10 ? 1 : 0);
+    ctx.fillRect(p.x + Math.cos(a)*r - 1, y + Math.sin(a)*r - 1, 2, 2);
+  }
+  drawItem({ type:G.hold.item, x:p.x, y:y, bob:0 });
 }
 function heartShape(x,y,col){
   ctx.fillStyle=col;

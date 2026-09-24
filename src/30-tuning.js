@@ -87,7 +87,34 @@ var TUNING_DEFAULTS = {
     minutes: 12, warnMinutes: 2,
     extraHearts: 3, foeSpeedScale: 0.7, foeHpScale: 0.75,
     knockdownHp: 4, knockdownIframes: 160, stepUpsPerRoom: 1,
-    starsFinish: 2, starsCleanRoom: 1, starsImproved: 2
+    starsFinish: 2, starsCleanRoom: 1, starsImproved: 2,
+    graceMinutes: 2          /* once time is up, finish at the next natural break, or after this */
+  },
+
+  /* ---- the world: things to cut, push, light and dig ---- */
+  world: {
+    bushCoinChance: 0.45, potCoinChance: 0.6, heartChance: 0.18,
+    coinMagnetRange: 24, coinMagnetPull: 0.2, coinBurst: 1.6, coinFriction: 0.86,
+    pushFrames: 14, pushSlideFrames: 12, holdFrames: 84,
+    sparkleCoins: 6, secretChestCoins: 15, digRange: 13
+  },
+
+  /* ---- tools, found on islands 2, 3 and 5 ---- */
+  tools: {
+    shieldSlow: 0.55, bombFuse: 90, bombRadius: 26, bombDamage: 3, bombCooldown: 40,
+    arrowSpeed: 3.2, arrowLife: 90, arrowDamage: 1, arrowCooldown: 22
+  },
+
+  /* ---- the owl: follows, speaks, and hints when he is stuck ---- */
+  owl: { follow: 0.07, damping: 0.8, hintAfterSec: 22, speakGapSec: 6, bobRate: 0.07 },
+
+  /* ---- the sea ---- */
+  islands: {
+    roomsMin: 5, roomsMax: 7, foesBase: 2, foesPerIsland: 0.5, foesMax: 5,
+    bossHpPerIsland: 3, decoMin: 3, decoMax: 7,
+    unlockBase: 4, unlockStep: 6, unlockGrow: 1,
+    starsIsland: 5, starsSecret: 1, coinsPerStar: 20,
+    winDelayFrames: 110, sailFrames: 70
   }
 };
 

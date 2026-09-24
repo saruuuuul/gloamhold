@@ -336,7 +336,7 @@ SCREENS.title = {
                                : 'dichoptic dungeon · side-by-side stereo'; },
   items: function(){
     return [
-      { k:'act', icon:'play',    label:'Play',                run: function(){ startRun(); } },
+      { k:'act', icon:'play',    label:'Play',                run: function(){ openMenu('map'); } },
       { k:'act', icon:'star',    label:'Easy setup',          run: function(){ openMenu('kidIntro'); } },
       { k:'act', icon:'gear',    label:'Grown-up setup',      run: function(){ openMenu('adult'); } },
       { k:'act', icon:'cross',   label:'Alignment check',     run: function(){ startNonius(); } },
@@ -370,6 +370,7 @@ SCREENS.adult = {
       { k:'act', icon:'grid', label:'Calibrate against a grid', run:function(){ openMenu('lensgrid'); } },
       { k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } },
       { k:'tog', icon:'kid', label:'Child mode', get:function(){ return cfg.kidMode; }, set:function(v){ cfg.kidMode = v; } },
+      { k:'tog', icon:'flag', label:'All islands open', get:function(){ return cfg.allIslands; }, set:function(v){ cfg.allIslands = v; } },
       { k:'num', icon:'flag', label:'Session length', min:0, max:45, step:1,
         get:function(){ return TUNING.session.minutes; },
         set:function(v){ TUNING.session.minutes = v; saveTuning(); },
@@ -432,6 +433,9 @@ function statRows(){
   S.trail.forEach(function(p){ lo = Math.min(lo, p.c); });
   if(!S.trail.length) lo = cfg.strong;
   return [
+    ['island', ISLAND ? ISLAND.name : '\u2014'],
+    ['coins / secrets', S.coins + ' / ' + S.secrets],
+    ['knockdowns', String(S.knockdowns || 0)],
     ['time', fmtTime(S.elapsed)],
     ['rooms entered', String(S.rooms)],
     ['clean rooms', String(S.cleanRooms)],
@@ -461,6 +465,7 @@ SCREENS.pause = {
       { k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } },
       { k:'act', icon:'gear',  label:'Grown-up setup',  run:function(){ openMenu('adult'); } },
       { k:'act', icon:'star',  label:'Easy setup again',run:function(){ openMenu('kidIntro'); } },
+      { k:'act', icon:'back',  label:'Back to the sea', run:function(){ running = false; S.ended = true; closeMenu(); openMenu('map'); } },
       { k:'act', icon:'flag',  label:'End session',     run:function(){ endSession(); } }
     ];
   },
@@ -474,11 +479,14 @@ SCREENS.summary = {
   title: 'RUN OVER',
   onOpen: function(){ awardSession(); say(S.won ? 'ready' : 'again'); },
   nav: function(){},
-  confirm: function(){ sfx('uiOk'); S.ended = true; startRun(); },
+  confirm: function(){
+    sfx('uiOk'); S.ended = true;
+    if(S.won){ closeMenu(); openMenu('map'); } else startRun();
+  },
   cancel: function(){ closeMenu(); openMenu('title'); },
   custom: function(eye, vp, u){
     drawSimpleScreen(vp, u, {
-      title: S.won ? 'YOU WIN!' : 'GOOD TRY!',
+      title: S.won ? 'LIGHT FOUND!' : 'GOOD TRY!',
       titleCol: S.won ? C.gold : C.jade,
       deco: function(cx, cy, uu){
         var i;
@@ -488,12 +496,13 @@ SCREENS.summary = {
           drawIcon('star', cx + Math.cos(a)*rr, cy + Math.sin(a)*rr*0.62, uu*2.4, C.gold);
           ctx.globalAlpha = 1;
         }
-        drawIcon(S.won ? 'key' : 'sword', cx, cy, uu*10, S.won ? C.gold : C.jade);
+        if(S.won) drawItem({ type:'orb', x:cx, y:cy, bob:0 });
+        else drawIcon('sword', cx, cy, uu*10, C.jade);
       },
       big: '+' + S.starsGained + ' stars',
       sub: PROG.stars + ' stars  ·  ' + PROG.streak + ' day streak',
-      button: 'PLAY AGAIN',
-      foot: 'A play again · B title'
+      button: S.won ? 'SAIL ON' : 'TRY AGAIN',
+      foot: S.won ? 'A to the sea · B title' : 'A try again · B title'
     });
   }
 };
@@ -505,7 +514,7 @@ SCREENS.report = {
   confirm: function(){ menuCancel(); },
   custom: function(eye, vp, u){
     mtext('THIS RUN', vp.x + vp.w/2, vp.y + u*8, u*7, C.gold, 'center', 700, F_PIX);
-    drawStatBlock(vp, u, vp.y + u*18);
+    drawStatBlock(vp, u, vp.y + u*16);
     mtext(PROG.stars + ' stars · ' + PROG.sessions + ' sessions · ' + PROG.streak + ' day streak',
           vp.x + vp.w/2, vp.y + vp.h - u*12, u*3, '#6a718c', 'center', 400, F_MONO);
     drawMenuFoot({ hint:'B back' }, vp, u);
@@ -851,7 +860,9 @@ SCREENS.noniusResult = {
    load-bearing. Stars and a day streak persist across sessions;
    PROG is the only thing in this app that outlives a run.
    ============================================================ */
-var PROG = { stars:0, sessions:0, streak:0, lastDay:'', best:1 };
+var PROG = { stars:0, sessions:0, streak:0, lastDay:'', best:1,
+             coins:0, lastIsland:1, tools:{ shield:false, bombs:false, bow:false },
+             lit:{}, secrets:{} };
 
 function loadProg(){
   try{
@@ -873,7 +884,11 @@ function dayKey(d){
 function awardSession(){
   if(S.awarded) return S.starsGained;
   S.awarded = true;
-  var SS = TUNING.session, gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom, lo = 1;
+  var SS = TUNING.session, I = TUNING.islands, lo = 1;
+  var gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom
+             + (S.firstLight ? I.starsIsland : 0)
+             + (S.secrets || 0) * I.starsSecret
+             + Math.floor((S.coins || 0) / I.coinsPerStar);
   S.trail.forEach(function(p){ lo = Math.min(lo, p.c); });
   if(S.trail.length && lo < PROG.best - 0.001){ gained += SS.starsImproved; PROG.best = lo; }
   PROG.stars += gained;
@@ -932,11 +947,14 @@ SCREENS.stars = {
     mtext('STARS', cx, vp.y + u*8, u*9, C.gold, 'center', 700, F_PIX);
     mtext(String(PROG.stars), cx, vp.y + vp.h*0.33, u*16, C.gold, 'center', 700, F_PIX);
     drawStarRow(cx, vp.y + vp.h*0.50, Math.min(PROG.stars, 8), u, 8);
+    var lights = Object.keys(PROG.lit).filter(function(k){ return PROG.lit[k]; }).length;
     var rows = [
+      ['lights found', lights + ' / ' + ISLAND_COUNT],
+      ['coins', String(PROG.coins)],
       ['day streak', String(PROG.streak)],
       ['sessions', String(PROG.sessions)],
       ['best contrast', PROG.best < 1 ? pct(PROG.best) : '\u2014']
-    ], i, ry = vp.y + vp.h*0.62;
+    ], i, ry = vp.y + vp.h*0.57;
     for(i=0;i<rows.length;i++){
       mtext(rows[i][0], vp.x + u*10, ry, u*3.6, '#8e8a7e', 'left', 400, F_MONO);
       mtext(rows[i][1], vp.x + vp.w - u*10, ry, u*3.6, '#ded9cb', 'right', 500, F_MONO);

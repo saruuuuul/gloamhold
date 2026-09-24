@@ -232,6 +232,8 @@ function endRun(){
   running = false; S.ended = true; S.won = !!(G && G.won);
   sfx(S.won ? 'win' : 'lose');
   letSleep();
+  /* time ran out during this run: end the sitting here, with its stars */
+  if(SIT.due && !cfg.flat){ finishSession(); return; }
   if(cfg.flat){
     fillStats(S.won ? 'The warden falls' : 'You fell', S.won ? 'dungeon complete' : 'run ended');
     show('pPause');
@@ -247,7 +249,8 @@ function openDevStereo(from){ devReturnStereo = from; openDev('pTitle'); }
 function startRun(){
   audioUnlock(); goImmersive(); keepAwake();
   closeMenu(); hideAll(); nonius.on = false;
-  if(!G || S.ended) newGame();
+  if(SIT.done) SIT = newSitting();
+  if(!G || S.ended) newGame(CUR_ISLAND);
   running = true; last = performance.now();
   requestAnimationFrame(loop);
 }
@@ -342,31 +345,60 @@ function loop(now){
   if(!running) return;
   var dt = Math.min(now-last, 120); last = now;
   S.elapsed += dt;
+  SIT.ms += dt;
+  /* exposure telemetry: how long each per-eye layer actually had something
+     on it. Not an outcome measure — just whether the game is giving the
+     weaker eye anything to do. */
+  if(G && !G.fadeDir){
+    var anySig = false;
+    if(G.foes.length){ S.sig.foe += dt; anySig = true; }
+    if(itemsVisible()){ S.sig.item += dt; anySig = true; }
+    if(clueActive()){ S.sig.clue += dt; anySig = true; }
+    if(anySig) S.sig.any += dt;
+  }
   acc += dt;
   var guard = 0;
-  while(acc >= 16.667 && guard < 5){ gatherInput(); update(); acc -= 16.667; guard++; }
+  /* stop stepping the moment something (the sitting ending) stops the run */
+  while(acc >= 16.667 && guard < 5 && running){ gatherInput(); update(); acc -= 16.667; guard++; }
+  if(!running){ render(); return; }
   if(acc > 100) acc = 0;
   if(toastT>0) toastT--;
   if(S.elapsed - (S.lastLog||0) > 15000){ S.lastLog = S.elapsed; logContrast(); }
   checkSessionGoal();
   render();
   if((G.dead || G.won) && !G.endT){ G.endT = now; }
+  /* an island's light found moves on by itself after a beat — nothing to press */
+  if(G.won && G.endT && now - G.endT > TUNING.islands.winDelayFrames*16.667){ endRun(); return; }
   requestAnimationFrame(loop);
 }
 
 /* A session that ends on a planned note beats one that ends when a
    five-year-old has had enough; the treasure screen is the reward for
    stopping, not for pushing on. */
+/* A SITTING spans every run he plays until it ends — it is not reset by
+   Play Again. It used to be the run's own clock (S.elapsed, zeroed by
+   newGame), so a five-minute island ended, the clock started over, and the
+   planned twelve-minute ending effectively never came. */
+function newSitting(){ return { ms:0, warned:false, due:false, dueAt:0, done:false }; }
+var SIT = newSitting();
 function checkSessionGoal(){
   var SS = TUNING.session;
-  if(!cfg.kidMode || SS.minutes <= 0 || S.sessionDone) return;
-  var left = SS.minutes*60000 - S.elapsed;
-  if(left <= SS.warnMinutes*60000 && !S.warned){
-    S.warned = true; toast('nearly finished'); say('soon');
+  if(!cfg.kidMode || SS.minutes <= 0 || SIT.done) return;
+  var left = SS.minutes*60000 - SIT.ms;
+  if(left <= SS.warnMinutes*60000 && !SIT.warned){
+    SIT.warned = true; toast('nearly finished'); say('soon');
   }
-  if(left <= 0) finishSession();
+  /* time is up: finish at the next natural break (a room cleared, a door
+     walked through, an island done), or after a grace period — never by
+     yanking him out of the middle of a fight */
+  if(left <= 0 && !SIT.due){ SIT.due = true; SIT.dueAt = SIT.ms; owlSay('rest', true); }
+  if(SIT.due && SIT.ms - SIT.dueAt > SS.graceMinutes*60000) finishSession();
+}
+function sittingBreakpoint(){
+  if(running && SIT.due && !SIT.done) finishSession();
 }
 function finishSession(){
+  SIT.done = true; SIT.due = false;
   S.sessionDone = true; S.ended = true;
   running = false; letSleep();
   S.starsGained = awardSession();

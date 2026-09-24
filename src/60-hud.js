@@ -19,8 +19,22 @@ function drawHUD(eye, vp0){
     var full = p.hp >= (i+1)*2, half = !full && p.hp === i*2+1;
     hudHeart(x + i*15, y, full?2:(half?1:0));
   }
+  /* coins */
+  var cyH = y + 18;
+  ctx.fillStyle = '#8a6a1c'; ctx.fillRect(x, cyH, 6, 7);
+  ctx.fillStyle = C.gold;    ctx.fillRect(x, cyH, 5, 6);
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.font='600 11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = C.gold; ctx.fillText(String(G.coins), x+10, cyH+3);
   /* keys */
   var rx = vp.x + vp.w - pad;
+  if(G.tool){
+    ctx.strokeStyle = 'rgba(232,177,63,.45)'; ctx.lineWidth = 1;
+    ctx.strokeRect(rx-15.5, y-3.5, 16, 16);
+    drawToolIcon(G.tool, rx-7.5, y+4.5, 1);
+    if(ownedTools().length > 1){ ctx.fillStyle = '#6a718c'; ctx.fillRect(rx-15, y+14, 15, 1); }
+    rx -= 24;
+  }
   if(G.bossKey){ hudKey(rx-10, y+5, C.violet); rx -= 24; }
   hudKey(rx-10, y+5, G.keys>0 ? C.gold : '#333a4c');
   ctx.textAlign='right'; ctx.textBaseline='middle';
@@ -59,9 +73,9 @@ function drawHUD(eye, vp0){
     ctx.fillStyle='rgba(4,6,10,.78)'; ctx.fillRect(vp.x, vp.y+vp.h/2-44, vp.w, 88);
     ctx.font='700 20px Silkscreen, monospace';
     ctx.fillStyle = G.won ? C.gold : C.blood;
-    ctx.fillText(G.won ? 'THE WARDEN FALLS' : 'YOU FALL', vp.x+vp.w/2, vp.y+vp.h/2-12);
+    ctx.fillText(G.won ? 'LIGHT FOUND!' : 'YOU FALL', vp.x+vp.w/2, vp.y+vp.h/2-12);
     ctx.font='400 11px "IBM Plex Mono", monospace'; ctx.fillStyle='#8e8a7e';
-    ctx.fillText('any button / tap \u2192 session summary', vp.x+vp.w/2, vp.y+vp.h/2+16);
+    ctx.fillText(G.won ? 'the island shines again' : 'any button to try again', vp.x+vp.w/2, vp.y+vp.h/2+16);
   }
   if(touch.active) drawTouchPads(eye, vp);
 }
@@ -155,11 +169,12 @@ function noniusAnswer(a){
 }
 
 /* ---------------- input ---------------- */
-var input = { x:0, y:0, atk:false };
+/* atk and toolPress are edges (one press); tool is held (the shield) */
+var input = { x:0, y:0, atk:false, tool:false, toolPress:false, cycle:false };
 var keys = {};
-var touch = { active:false, id:-1, ox:0, oy:0 };
+var touch = { active:false, id:-1, ox:0, oy:0, toolId:-1 };
 var tilt = { on:false, base:null, beta:0, gamma:0 };
-var padPrev = false;
+var padPrev = false, padToolPrev = false, padCyclePrev = false, padToolHeld = false;
 
 addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
@@ -182,6 +197,8 @@ addEventListener('keydown', function(e){
     return;
   }
   if(k===' '||k==='j'||k==='z') input.atk = true;
+  if(!e.repeat && (k==='x'||k==='k')) input.toolPress = true;
+  if(!e.repeat && (k==='c'||k==='q'||k==='tab')){ input.cycle = true; e.preventDefault(); }
   if(k==='escape'||k==='p'){ if(running) doPause(); }
   if(G && (G.dead||G.won) && (e.key===' '||e.key==='Enter')) endRun();
 });
@@ -205,20 +222,25 @@ function readPad(){
     if(g.buttons[15] && g.buttons[15].pressed) x=1;
     if(g.buttons[12] && g.buttons[12].pressed) y=-1;
     if(g.buttons[13] && g.buttons[13].pressed) y=1;
-    var fire = false, b;
-    for(b=0;b<4;b++) if(g.buttons[b] && g.buttons[b].pressed) fire = true;
-    if(g.buttons[7] && g.buttons[7].pressed) fire = true;
+    /* A / X / right trigger: the action. B / Y / left trigger: the tool.
+       Shoulders swap tools. Two things to press, never more. */
+    var pb = function(n){ return !!(g.buttons[n] && g.buttons[n].pressed); };
+    var fire = pb(0) || pb(2) || pb(7);
+    var tool = pb(1) || pb(3) || pb(6);
+    var cyc = pb(4) || pb(5);
     if(fire && !padPrev){
       input.atk = true;
       if(nonius.on) noniusAnswer(1);
       if(G && (G.dead||G.won)) endRun();
     }
-    padPrev = fire;
+    if(tool && !padToolPrev) input.toolPress = true;
+    if(cyc && !padCyclePrev) input.cycle = true;
+    padPrev = fire; padToolPrev = tool; padCyclePrev = cyc; padToolHeld = tool;
     if(g.buttons[9] && g.buttons[9].pressed && running) doPause();
     if(x||y) return [x,y];
     return [0,0];
   }
-  padPrev = false; return null;
+  padPrev = false; padToolPrev = false; padCyclePrev = false; padToolHeld = false; return null;
 }
 cv.addEventListener('pointerdown', function(e){
   cv.setPointerCapture(e.pointerId);
@@ -241,6 +263,7 @@ cv.addEventListener('pointerdown', function(e){
   if(G && (G.dead||G.won)){ endRun(); return; }
   touch.active = true;
   if(e.clientX < VW*0.5){ touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY; }
+  else if(e.clientY < VH*0.4 && G && G.tool){ touch.toolId = e.pointerId; input.toolPress = true; }
   else { input.atk = true; }
   e.preventDefault();
 });
@@ -250,7 +273,10 @@ cv.addEventListener('pointermove', function(e){
   var m = Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
   touch.tx = dx; touch.ty = dy;
 });
-function endTouch(e){ if(e.pointerId===touch.id){ touch.id=-1; touch.tx=0; touch.ty=0; } }
+function endTouch(e){
+  if(e.pointerId===touch.id){ touch.id=-1; touch.tx=0; touch.ty=0; }
+  if(e.pointerId===touch.toolId) touch.toolId = -1;
+}
 cv.addEventListener('pointerup', endTouch);
 cv.addEventListener('pointercancel', endTouch);
 
@@ -272,6 +298,7 @@ function gatherInput(){
   if(!x && !y && tl){ x=tl[0]; y=tl[1]; }
   if(!x && !y && touch.id>=0){ x=touch.tx||0; y=touch.ty||0; }
   input.x = x; input.y = y;
+  input.tool = !!(keys['x'] || keys['k'] || padToolHeld || touch.toolId >= 0);
 }
 
 /* ---------------- controller-native menu input ----------------

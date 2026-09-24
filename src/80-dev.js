@@ -15,7 +15,14 @@ var RANGE_RULES = [
   [/^(master|game|ui)$/,                                  function(){ return {min:0, max:1, step:0.05}; }],
   [/(Contrast|Inset|Pulse)$/i,                            function(){ return {min:0, max:1, step:0.01}; }],
   [/(Rounds|MissesToStop|maxRows|repeatDelay|repeatRate)$/i, function(v){ return {min:1, max:Math.max(12, Math.ceil(v*3)), step:1}; }],
-  [/^(clickDur|tailDur)$/,                                function(){ return {min:0.01, max:1, step:0.01}; }]
+  [/^(clickDur|tailDur)$/,                                function(){ return {min:0.01, max:1, step:0.01}; }],
+  [/Chance$/,                                             function(){ return {min:0, max:1, step:0.01}; }],
+  [/(Sec|Minutes|minutes)$/,                              function(v){ return {min:0, max:Math.max(30, Math.ceil(v*3)), step:1}; }],
+  [/^(extraHearts|knockdownHp|stepUpsPerRoom|catchTrials|falseAlarmLimit|roomsMin|roomsMax|foesBase|foesMax|decoMin|decoMax)$/,
+                                                          function(v){ return {min:0, max:Math.max(10, Math.ceil(v*3)), step:1}; }],
+  [/^(stars|unlock|coinsPerStar|sparkleCoins|secretChestCoins|bombDamage|arrowDamage|bossHpPerIsland)/,
+                                                          function(v){ return {min:0, max:Math.max(20, Math.ceil(v*3)), step:1}; }],
+  [/Scale$/,                                              function(){ return {min:0.1, max:2, step:0.05}; }]
 ];
 function rangeFor(path, v){
   var leaf = path.split('.').pop(), i;
@@ -34,7 +41,12 @@ var SECTION_NOTE = {
   feel:    'Timing of feedback, not difficulty.',
   menu:    'Stereo menu chrome. Sizes are in viewport units (1 = 1% of the short side of one eye), so they scale with the screen.',
   audio:   'Synthesised sound. master is the bus; game and ui are the two sub-mixes. Frequencies are in Hz.',
-  kid:     'The child setup wizard. huntStepFactor is how much fainter each round gets; safetyBackoff pads the final contrast above the faintest catch.'
+  kid:     'The child setup wizard. huntStepFactor is how much fainter each round gets; safetyBackoff pads the final contrast above the faintest catch.',
+  session: 'The shape of a sitting: its length, child-mode difficulty, and how many stars things are worth.',
+  world:   'Grass, pots, stones, chests and sparkles. pushFrames is how long he has to lean on a stone before it moves.',
+  tools:   'Shield, bombs and bow. No ammo on purpose.',
+  owl:     'The companion. hintAfterSec is how long he can be stuck before it speaks up.',
+  islands: 'The sea. unlockBase/Step/Grow set how many stars each island costs.'
 };
 var devBuilt = false;
 function buildDevPanel(){
@@ -88,7 +100,17 @@ function sessionRecord(){
                roomsClean:S.cleanRooms, hits:S.hits, kills:S.kills,
                stepsDown:S.stepsDown, stepsUp:S.stepsUp,
                contrastStart:(S.trail[0]||{}).c, contrastEnd:cfg.strong,
-               contrastBest:S.trail.reduce(function(a,p){ return Math.min(a,p.c); }, 1) },
+               contrastBest:S.trail.reduce(function(a,p){ return Math.min(a,p.c); }, 1),
+               island:ISLAND ? ISLAND.id : null, knockdowns:S.knockdowns||0,
+               coins:S.coins||0, secrets:S.secrets||0, starsGained:S.starsGained||0,
+               firstLight:!!S.firstLight, sittingMin:+(SIT.ms/60000).toFixed(1) },
+    /* how long each per-eye layer had something on it, and what fraction of
+       the run that was — whether the game gave the weaker eye work to do */
+    exposure: (function(){
+      var sg = S.sig || { foe:0, item:0, clue:0, any:0 }, T = Math.max(1, S.elapsed);
+      return { foeSec:Math.round(sg.foe/1000), itemSec:Math.round(sg.item/1000), clueSec:Math.round(sg.clue/1000),
+               anySec:Math.round(sg.any/1000), anyFrac:+(sg.any/T).toFixed(2) };
+    })(),
     contrastTrail: S.trail.map(function(p){ return { sec:Math.round(p.t/1000), c:+p.c.toFixed(2) }; }),
     noniusChecks: S.checks.map(function(c){ return { sec:Math.round(c.t/1000), answer:c.a }; }),
     rooms: S.roomLog,
@@ -140,6 +162,29 @@ try{
     get hunt(){ return HUNT; },
     get prog(){ return PROG; },
     get running(){ return running; },
+    get sit(){ return SIT; },
+    get island(){ return ISLAND; },
+    get input(){ return input; },
+    alphaFor: alphaFor,
+    loadIsland: function(n){ CUR_ISLAND = n; },
+    islandCheck: function(from, to){
+      var out = [];
+      for(var n=from; n<=to; n++){
+        var isl = n === 1 ? homeIsland() : genIsland(n);
+        out.push({ n:n, rooms:Object.keys(isl.rooms).length, attempt:isl.attempt||0, fallback:!!isl.fallback,
+                   secrets:isl.secrets.length, problems:islandProblems(isl) });
+      }
+      return out;
+    },
+    /* run the simulation without rendering — deterministic tests drive this */
+    step: function(n){ for(var i=0; i<(n||1); i++) update(); },
+    /* stop the live loop so step() is the only thing moving the world —
+       otherwise gatherInput() overwrites whatever a test put in input */
+    freeze: function(){ running = false; },
+    nav: menuNav,
+    tp: function(tx, ty, face){ G.p.x = tx*TS + TS/2; G.p.y = ty*TS + TS/2; G.p.vx = G.p.vy = 0; if(face) G.p.face = face; },
+    room: function(key){ enterRoom(key, null); },
+    grant: function(t){ PROG.tools[t] = true; G.tool = t; },
     audio: function(){ return { ctx: AC ? AC.state : null, failed: audioFailed, muted: cfg.mute,
                                 master: TUNING.audio.master, effects: Object.keys(SFX).length }; },
     set: function(path, v){ setT(path, v); saveTuning(); rebuildDev(); },
