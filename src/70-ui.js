@@ -106,14 +106,21 @@ function drawPreview(){
 }
 
 /* ---- panels ---- */
-function show(id){ ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = (p!==id); }); el('nonBar').hidden = true; el('lensBar').hidden = true; cfg.grid = false; }
+function show(id){
+  /* a flat panel and a stereo menu must never be live at once: the UI loop
+     polls the gamepad for whichever menu is open, and a hidden one would eat
+     the input */
+  closeMenu();
+  ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = (p!==id); });
+  el('nonBar').hidden = true; el('lensBar').hidden = true; cfg.grid = false;
+}
 function hideAll(){ ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(p).hidden = true; }); el('nonBar').hidden = true; el('lensBar').hidden = true; }
 
 el('btnStart').onclick  = function(){ show('pCheck'); el('checkResult').hidden = true; };
 el('btnBackTitle').onclick = function(){ show('pTitle'); drawPreview(); };
-el('btnCheckShow').onclick = function(){ hideAll(); nonius.on = true; el('nonBar').hidden = false; render(); };
-el('btnEnter').onclick  = function(){ goImmersive(); keepAwake(); hideAll(); nonius.on=false; if(!G || S.ended) newGame(); running = true; last = performance.now(); requestAnimationFrame(loop); };
-el('btnResume').onclick = function(){ keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
+el('btnCheckShow').onclick = function(){ audioUnlock(); hideAll(); nonius.on = true; el('nonBar').hidden = false; render(); };
+el('btnEnter').onclick  = function(){ audioUnlock(); goImmersive(); keepAwake(); hideAll(); nonius.on=false; if(!G || S.ended) newGame(); running = true; last = performance.now(); requestAnimationFrame(loop); };
+el('btnResume').onclick = function(){ audioUnlock(); keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
 el('btnRecheck').onclick= function(){ running=false; show('pCheck'); el('checkResult').hidden = true; };
 el('btnQuit').onclick   = function(){ running=false; S.ended=true; letSleep(); show('pTitle'); drawPreview(); };
 Array.prototype.forEach.call(document.querySelectorAll('#nonBar button'), function(b){
@@ -133,7 +140,10 @@ var devFrom = 'pTitle';
 function openDev(from){ devFrom = from; running=false; buildDevPanel(); syncJsonBox(); show('pDev'); }
 el('btnDevTitle').onclick = function(){ openDev('pTitle'); };
 el('btnDev').onclick      = function(){ openDev('pPause'); };
-el('btnDevBack').onclick  = function(){ show(devFrom); drawPreview(); render(); };
+el('btnDevBack').onclick  = function(){
+  if(devReturnStereo){ var r = devReturnStereo; devReturnStereo = null; hideAll(); openMenu(r, true); return; }
+  show(devFrom); drawPreview(); render();
+};
 el('btnRespawn').onclick  = function(){
   if(!G) return;
   rs(G.key).cleared = false; enterRoom(G.key, null); render();
@@ -213,11 +223,71 @@ el('btnTilt').onclick = function(){
 
 /* ---- pause / results ---- */
 function fmtTime(ms){ var s=Math.round(ms/1000); return Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s'; }
-function doPause(){ running = false; fillStats('Paused','gloamhold'); show('pPause'); }
+function doPause(){
+  running = false;
+  if(cfg.flat){ fillStats('Paused','gloamhold'); show('pPause'); return; }
+  openMenu('pause');
+}
 function endRun(){
   running = false; S.ended = true; S.won = !!(G && G.won);
-  fillStats(S.won ? 'The warden falls' : 'You fell', S.won ? 'dungeon complete' : 'run ended');
-  show('pPause');
+  sfx(S.won ? 'win' : 'lose');
+  letSleep();
+  /* time ran out during this run: end the sitting here, with its stars */
+  if(SIT.due && !cfg.flat){ finishSession(); return; }
+  if(cfg.flat){
+    fillStats(S.won ? 'The warden falls' : 'You fell', S.won ? 'dungeon complete' : 'run ended');
+    show('pPause');
+    return;
+  }
+  closeMenu(); openMenu('summary');
+}
+
+/* ---------------- flow the stereo menus drive ---------------- */
+var devReturnStereo = null;
+function openDevStereo(from){ devReturnStereo = from; openDev('pTitle'); }
+
+function startRun(){
+  audioUnlock(); goImmersive(); keepAwake();
+  closeMenu(); hideAll(); nonius.on = false;
+  if(SIT.done) SIT = newSitting();
+  if(!G || S.ended) newGame(CUR_ISLAND);
+  running = true; last = performance.now();
+  requestAnimationFrame(loop);
+}
+function resumeRun(){
+  audioUnlock(); keepAwake(); closeMenu(); hideAll();
+  running = true; last = performance.now();
+  requestAnimationFrame(loop);
+}
+function endSession(){
+  running = false; S.ended = true; letSleep();
+  closeMenu(); openMenu('title'); drawPreview();
+}
+function menuStart(){
+  if(MENU.id === 'pause') resumeRun();
+  else startRun();
+}
+function startNonius(){ audioUnlock(); openMenu('nonius'); }
+function goFlat(){
+  cfg.flat = true; saveCfg();
+  show('pTitle'); drawPreview(); render();
+}
+function leaveFlat(){
+  cfg.flat = false; saveCfg();
+  hideAll(); openMenu('title');
+}
+
+/* One persistent frame callback for the menus. Gamepads expose state, not
+   events, so a menu that a controller can drive has to be polled; this is
+   also what animates the child wizard's timers. It idles out in one branch
+   while the dungeon loop is running. */
+var uiRAF = 0;
+function uiLoop(){
+  uiRAF = requestAnimationFrame(uiLoop);
+  if(running || !MENU.id) return;
+  menuTick();
+  gatherMenuInput();
+  render();
 }
 function fillStats(title, sub){
   el('pauseTitle').textContent = title; el('pauseSub').textContent = sub;
@@ -275,20 +345,71 @@ function loop(now){
   if(!running) return;
   var dt = Math.min(now-last, 120); last = now;
   S.elapsed += dt;
+  SIT.ms += dt;
+  /* exposure telemetry: how long each per-eye layer actually had something
+     on it. Not an outcome measure — just whether the game is giving the
+     weaker eye anything to do. */
+  if(G && !G.fadeDir){
+    var anySig = false;
+    if(G.foes.length){ S.sig.foe += dt; anySig = true; }
+    if(itemsVisible()){ S.sig.item += dt; anySig = true; }
+    if(clueActive()){ S.sig.clue += dt; anySig = true; }
+    if(anySig) S.sig.any += dt;
+  }
   acc += dt;
   var guard = 0;
-  while(acc >= 16.667 && guard < 5){ gatherInput(); update(); acc -= 16.667; guard++; }
+  /* stop stepping the moment something (the sitting ending) stops the run */
+  while(acc >= 16.667 && guard < 5 && running){ gatherInput(); update(); acc -= 16.667; guard++; }
+  if(!running){ render(); return; }
   if(acc > 100) acc = 0;
   if(toastT>0) toastT--;
   if(S.elapsed - (S.lastLog||0) > 15000){ S.lastLog = S.elapsed; logContrast(); }
+  checkSessionGoal();
   render();
   if((G.dead || G.won) && !G.endT){ G.endT = now; }
+  /* an island's light found moves on by itself after a beat — nothing to press */
+  if(G.won && G.endT && now - G.endT > TUNING.islands.winDelayFrames*16.667){ endRun(); return; }
   requestAnimationFrame(loop);
+}
+
+/* A session that ends on a planned note beats one that ends when a
+   five-year-old has had enough; the treasure screen is the reward for
+   stopping, not for pushing on. */
+/* A SITTING spans every run he plays until it ends — it is not reset by
+   Play Again. It used to be the run's own clock (S.elapsed, zeroed by
+   newGame), so a five-minute island ended, the clock started over, and the
+   planned twelve-minute ending effectively never came. */
+function newSitting(){ return { ms:0, warned:false, due:false, dueAt:0, done:false }; }
+var SIT = newSitting();
+function checkSessionGoal(){
+  var SS = TUNING.session;
+  if(!cfg.kidMode || SS.minutes <= 0 || SIT.done) return;
+  var left = SS.minutes*60000 - SIT.ms;
+  if(left <= SS.warnMinutes*60000 && !SIT.warned){
+    SIT.warned = true; toast('nearly finished'); say('soon');
+  }
+  /* time is up: finish at the next natural break (a room cleared, a door
+     walked through, an island done), or after a grace period — never by
+     yanking him out of the middle of a fight */
+  if(left <= 0 && !SIT.due){ SIT.due = true; SIT.dueAt = SIT.ms; owlSay('rest', true); }
+  if(SIT.due && SIT.ms - SIT.dueAt > SS.graceMinutes*60000) finishSession();
+}
+function sittingBreakpoint(){
+  if(running && SIT.due && !SIT.done) finishSession();
+}
+function finishSession(){
+  SIT.done = true; SIT.due = false;
+  S.sessionDone = true; S.ended = true;
+  running = false; letSleep();
+  S.starsGained = awardSession();
+  sfx('fanfare');
+  closeMenu(); openMenu('sessionDone');
 }
 
 /* ---------------- boot ---------------- */
 function start(state){
   loadTuning();
+  loadProg();
   LENS_PRESETS = TUNING.optics.presets;
   el('buildStamp').textContent = 'Build ' + BUILD;
   /* The artifact viewer never grants a page download permission, so the
@@ -312,8 +433,10 @@ function start(state){
   if(cfg.tilt && 'DeviceOrientationEvent' in window && !DeviceOrientationEvent.requestPermission){
     tilt.on = true; addEventListener('deviceorientation', onTilt);
   }
-  newGame(); running = false; render();
-  show('pTitle');
+  newGame(); running = false;
+  if(cfg.flat) show('pTitle'); else openMenu('title');
+  render();
+  uiLoop();
 }
 try{
   if(window.claude && window.claude.hot){

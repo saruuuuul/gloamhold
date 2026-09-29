@@ -33,13 +33,20 @@ a viewer when you discover the problem**. So the design optimises for three thin
 ```
 src/                 concatenated in filename order — 20 runs before 40
   00-head.html       title, fonts, CSS
-  10-panels.html     overlay screens (setup, alignment check, pause, tuning)
+  10-panels.html     flat fallback panels + the generated tuning panel
   20-core.js         config, canvas, WebGL lens stage, dungeon tables
-  30-tuning.js       TUNING: every balance / therapy / optics number
-  40-entities.js     enemies, physics, damage, the adaptive staircase
+  25-islands.js      the sea: island definitions, seeded generator, validator
+  30-tuning.js       TUNING: every balance / therapy / audio / optics number
+  35-audio.js        synthesised sound effects and spoken prompts — no assets, no fetches
+  40-entities.js     update loop, enemies, damage, the adaptive staircase
+  42-world.js        grass, pots, stones, torches, sparkles, chests, cracks, eye switches
+  44-tools.js        shield, bombs, bow
+  46-owl.js          the companion
   50-render.js       per-eye rendering, contrast layers, calibration grid
+  55-menu.js         the stereo menus and the child setup wizard
+  57-map.js          the sea map and the boat
   60-hud.js          HUD, nonius check, input (keyboard / gamepad / touch / tilt)
-  70-ui.js           panels, sliders, wake lock, game loop, boot
+  70-ui.js           flow control, wake lock, game loop, boot
   80-dev.js          auto-generated tuning panel, session telemetry, GH console handle
 public/              manifest, service worker, icons — copied to dist verbatim
 build.py             concatenate → dist/index.html + dist/artifact-body.html
@@ -76,6 +83,119 @@ First-time setup, once:
 2. `git remote add origin git@github.com:<you>/gloamhold.git && git push -u origin main`
 3. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 4. The first push deploys to `https://<you>.github.io/gloamhold/`.
+
+## Menus are stereo, and a controller drives them
+
+Every screen the player sees — title, setup, alignment check, pause, summary, lens
+calibration — is drawn into the same offscreen canvas as the dungeon, once per eye, so it
+goes through the same barrel pre-distortion. A menu you cannot read with the viewer on is a
+menu you take the viewer off to use, and taking the viewer off is what ruins an alignment
+check. The HTML panels still exist as a flat fallback for a grown-up at a desk, and they are
+where the generated tuning panel lives; you reach them from **Flat menus** on the title.
+
+Controls, everywhere:
+
+| | |
+|---|---|
+| d-pad / stick / arrows / WASD | move the cursor, change a value |
+| A (or any face button) / Enter / Space | pick |
+| B / Esc / Backspace | back |
+| Start / P | play, or resume from the pause screen |
+| LB / RB | nudge the focused value |
+| tap | on a one-button screen, anywhere is the button; on a list, tap top / middle / bottom |
+
+## Setting it up with a child
+
+**Easy setup** on the title runs a three-step wizard with no reading in it: put the goggles
+on, catch the butterfly, say how many sticks you see.
+
+The butterfly step is a descending staircase. A target is shown to the **stronger eye only**,
+fainter each round, and the faintest one the player still catches — backed off one step —
+becomes the starting contrast. That is a detection threshold produced by a game, not a
+clinical measurement: a tired or distracted child reads lower than they really are. The
+grown-up screen shows what it measured and lets you override it.
+
+One decision the wizard deliberately does **not** ask: which eye is the weaker one. A
+five-year-old cannot answer it, and a wrong answer trains the wrong eye. It comes from the
+grown-up screen, from whoever measured it.
+
+Also worth knowing before you put a small child in a viewer: Cardboard-style optics are
+built for an adult eye spacing, around 63 mm. A five-year-old is nearer 50 mm. If the lens
+centres do not sit over the pupils, the barrel correction is off-axis for both eyes, which
+adds strain and works against the fusion the whole exercise depends on. The **lens centre**
+control shifts both eyes together and cannot fix a mismatch — check the viewer physically.
+
+## Playing it with a child
+
+**Child mode** (on by default, grown-up screen to turn it off) changes the shape of the game
+rather than just the numbers: more hearts, slower and softer enemies, and **you cannot die** —
+you get knocked down and helped back up. It also caps how much contrast a bad room can cost,
+because otherwise a child who is struggling gets the stronger eye pushed back up on every hit,
+and the harder he finds it the less dichoptic load he actually receives.
+
+A session has a **planned ending**: it warns a couple of minutes out and then finishes on a
+treasure screen with stars, rather than running until a five-year-old has had enough. Stars
+and a day streak persist between sessions and are the only thing in this app that outlives a
+run. That is deliberate — the games this was built to replace lost on boredom, not on
+mechanism.
+
+The **butterfly wizard interleaves catch trials**: rounds where nothing is shown at all. Press
+the button on enough of those and the run is thrown away and the contrast left untouched,
+because a child who mashes the button would otherwise always "measure" whatever the last
+scheduled round happened to be. The screen asks for one more go; the line underneath tells the
+grown-up what actually happened.
+
+Dying is not a dead end: the run ends on **GOOD TRY!**, stars are awarded anyway, and one big
+button starts the next one. A child who gets nothing for a bad run stops having bad runs by
+not playing. The numbers a grown-up wants moved to **This run in numbers** on the grown-up
+menu, because they were crowding the buttons off the bottom of the screen behind the lens
+inset — which is what made the end of a run feel like the controller had stopped working.
+
+Held upright, the app shows **turn the phone** instead of rendering. Orientation lock is
+refused more often than it is granted, and two tall slivers do not fuse into anything.
+
+## Islands, and what there is to do on them
+
+This grew into an Oceanhorn-style adventure because that is the game he loves, and the market
+dichoptic games lost him to boredom — compliance is what this whole thing lives or dies on.
+
+**The sea** is the hub: eight islands told apart by colour, a little boat that sails between
+them, and a beacon on every island whose light he has brought back. Islands open as he earns
+stars. Island 1 is the hand-built Gloamhold; the rest are generated from fixed seeds, so each
+island is the same every visit.
+
+**On an island** he cuts grass and smashes pots for coins and hearts, pushes stones onto plates,
+lights torches with his sword, digs where it sparkles, and opens chests — holding the find up
+over his head while the world pauses, which is the reward. Some rooms shut their doors until
+the monsters are beaten. The key room's puzzle hides either the warden's key or a **tool**:
+the shield on island 2, bombs on 3, the bow on 5. Bombs open cracked walls and the bow hits eye
+switches, so earlier islands keep secrets he can only reach later. The warden drops the
+island's light; picking it up finishes the island.
+
+**The owl** follows him, says the prompts out loud in Mongolian, and helps when he has been
+stuck for a while — by turning to look and speaking, never by putting a glow on the answer.
+
+**Why the layers matter here.** Everything he wants to find — plates, sparkles, cracks, eye
+switches, chests, coins — is drawn on the per-eye layers, faint in the stronger eye. So looking
+for treasure is the part that makes the weaker eye work, driven by curiosity rather than only
+by being chased. That is a design choice, not a claim about outcomes.
+
+Controls stay at two: **A** acts (swing, open, dig), **B** uses the tool in hand, a shoulder
+button swaps tools.
+
+## Sound
+
+Every effect is synthesised from oscillators at runtime. There are no audio files, nothing is
+fetched, and the single-file build stays single-file — which also means it works inside the
+Artifact sandbox, where external requests are blocked. The context is only created on a real
+gesture, because browsers refuse otherwise. `TUNING.audio` has a master gain and separate
+`game` and `ui` sub-mixes; **Sound** on the title mutes everything.
+
+The wizard also **speaks its instructions**, through the browser's own speech synthesiser, for
+the same reason — no files, no network. Language is set on the grown-up screen. If the device
+has no voice installed for that language the app stays silent rather than reading Cyrillic
+aloud in an English voice, which is noise a child cannot act on; **Speech on this device**
+reports which it is, so check it on the actual phone before relying on it.
 
 ## On the phone
 

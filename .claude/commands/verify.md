@@ -7,7 +7,7 @@ Run, in order, and stop at the first failure:
 ```bash
 python3 build.py
 node tools/check.mjs
-node tests/smoke.mjs
+node tests/smoke.mjs      # `npm install` first if node_modules/ is missing
 ```
 
 Report the build stamp, the check summary line and the smoke line. If `tools/check.mjs`

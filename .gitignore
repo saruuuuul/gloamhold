@@ -6,3 +6,4 @@ __pycache__/
 # local screenshots from tests
 *.png
 !public/*.png
+node_modules/

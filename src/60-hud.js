@@ -19,8 +19,22 @@ function drawHUD(eye, vp0){
     var full = p.hp >= (i+1)*2, half = !full && p.hp === i*2+1;
     hudHeart(x + i*15, y, full?2:(half?1:0));
   }
+  /* coins */
+  var cyH = y + 18;
+  ctx.fillStyle = '#8a6a1c'; ctx.fillRect(x, cyH, 6, 7);
+  ctx.fillStyle = C.gold;    ctx.fillRect(x, cyH, 5, 6);
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.font='600 11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = C.gold; ctx.fillText(String(G.coins), x+10, cyH+3);
   /* keys */
   var rx = vp.x + vp.w - pad;
+  if(G.tool){
+    ctx.strokeStyle = 'rgba(232,177,63,.45)'; ctx.lineWidth = 1;
+    ctx.strokeRect(rx-15.5, y-3.5, 16, 16);
+    drawToolIcon(G.tool, rx-7.5, y+4.5, 1);
+    if(ownedTools().length > 1){ ctx.fillStyle = '#6a718c'; ctx.fillRect(rx-15, y+14, 15, 1); }
+    rx -= 24;
+  }
   if(G.bossKey){ hudKey(rx-10, y+5, C.violet); rx -= 24; }
   hudKey(rx-10, y+5, G.keys>0 ? C.gold : '#333a4c');
   ctx.textAlign='right'; ctx.textBaseline='middle';
@@ -59,9 +73,9 @@ function drawHUD(eye, vp0){
     ctx.fillStyle='rgba(4,6,10,.78)'; ctx.fillRect(vp.x, vp.y+vp.h/2-44, vp.w, 88);
     ctx.font='700 20px Silkscreen, monospace';
     ctx.fillStyle = G.won ? C.gold : C.blood;
-    ctx.fillText(G.won ? 'THE WARDEN FALLS' : 'YOU FALL', vp.x+vp.w/2, vp.y+vp.h/2-12);
+    ctx.fillText(G.won ? 'LIGHT FOUND!' : 'YOU FALL', vp.x+vp.w/2, vp.y+vp.h/2-12);
     ctx.font='400 11px "IBM Plex Mono", monospace'; ctx.fillStyle='#8e8a7e';
-    ctx.fillText('any button / tap \u2192 session summary', vp.x+vp.w/2, vp.y+vp.h/2+16);
+    ctx.fillText(G.won ? 'the island shines again' : 'any button to try again', vp.x+vp.w/2, vp.y+vp.h/2+16);
   }
   if(touch.active) drawTouchPads(eye, vp);
 }
@@ -99,6 +113,7 @@ function drawTouchPads(eye, vp){
    its contrast is below threshold, and if the weak-eye bar vanishes that is
    suppression. Routing it through the layer system would hide both answers. */
 var nonius = { on:false, answer:null };
+var noniusMsg = '';
 function drawEyeNonius(eye){
   var g = eyeGeom(eye), vp=g.vp, s=g.s;
   var cx = g.ox + WW/2*s, cy = g.oy + WH/2*s;
@@ -141,27 +156,50 @@ function noniusAnswer(a){
     msg = 'The weaker eye’s bar is gone — that is suppression, and it is exactly what this is meant to catch. Dropping the stronger eye further. If it still disappears near 10%, stop and take this to your eye clinician.';
     cfg.strong = Math.max(0.05, Math.round((cfg.strong*0.7)/0.05)*0.05); syncSliders(); saveCfg(); logContrast();
   }
+  noniusMsg = msg;
+  sfx(a === 1 ? 'roomClear' : (a === 2 ? 'stepUp' : 'stepDown'));
   nonius.on = false;
   el('checkResult').hidden = false;
   el('checkText').textContent = msg;
-  el('pCheck').hidden = false;
   el('nonBar').hidden = true;
+  /* the flat panel is only forced open when a grown-up is at a desk; in the
+     viewer the answer comes back on the stereo result screen instead */
+  if(cfg.flat) el('pCheck').hidden = false;
   render();
 }
 
 /* ---------------- input ---------------- */
-var input = { x:0, y:0, atk:false };
+/* atk and toolPress are edges (one press); tool is held (the shield) */
+var input = { x:0, y:0, atk:false, tool:false, toolPress:false, cycle:false };
 var keys = {};
-var touch = { active:false, id:-1, ox:0, oy:0 };
+var touch = { active:false, id:-1, ox:0, oy:0, toolId:-1 };
 var tilt = { on:false, base:null, beta:0, gamma:0 };
-var padPrev = false;
+var padPrev = false, padToolPrev = false, padCyclePrev = false, padToolHeld = false;
 
 addEventListener('keydown', function(e){
-  keys[e.key.toLowerCase()] = true;
-  if([' ','arrowup','arrowdown','arrowleft','arrowright'].indexOf(e.key.toLowerCase())>=0) e.preventDefault();
-  if(e.key===' '||e.key.toLowerCase()==='j'||e.key.toLowerCase()==='z') input.atk = true;
-  if(e.key==='Escape'||e.key.toLowerCase()==='p'){ if(running) doPause(); }
-  if(nonius.on && ['1','2','3'].indexOf(e.key)>=0) noniusAnswer(+e.key);
+  var k = e.key.toLowerCase();
+  keys[k] = true;
+  if([' ','arrowup','arrowdown','arrowleft','arrowright'].indexOf(k)>=0) e.preventDefault();
+  audioUnlock();
+  if(nonius.on && ['1','2','3'].indexOf(e.key)>=0){ noniusAnswer(+e.key); return; }
+  if(MENU.id){
+    if(k===' '||k==='enter'){ menuConfirm(); return; }
+    if(k==='escape'||k==='backspace'){ menuCancel(); return; }
+    if(k==='p'){ menuStart(); return; }
+    /* The first step of a direction comes from this event, never from the
+       poll: two quick taps inside one animation frame would otherwise be
+       seen as one unchanged state and collapse into a single move. The poll
+       supplies auto-repeat only. */
+    if(!e.repeat){
+      var d = MENU_KEYDIR[k];
+      if(d) menuNav(d[0], d[1]);
+    }
+    return;
+  }
+  if(k===' '||k==='j'||k==='z') input.atk = true;
+  if(!e.repeat && (k==='x'||k==='k')) input.toolPress = true;
+  if(!e.repeat && (k==='c'||k==='q'||k==='tab')){ input.cycle = true; e.preventDefault(); }
+  if(k==='escape'||k==='p'){ if(running) doPause(); }
   if(G && (G.dead||G.won) && (e.key===' '||e.key==='Enter')) endRun();
 });
 addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
@@ -184,27 +222,48 @@ function readPad(){
     if(g.buttons[15] && g.buttons[15].pressed) x=1;
     if(g.buttons[12] && g.buttons[12].pressed) y=-1;
     if(g.buttons[13] && g.buttons[13].pressed) y=1;
-    var fire = false, b;
-    for(b=0;b<4;b++) if(g.buttons[b] && g.buttons[b].pressed) fire = true;
-    if(g.buttons[7] && g.buttons[7].pressed) fire = true;
+    /* A / X / right trigger: the action. B / Y / left trigger: the tool.
+       Shoulders swap tools. Two things to press, never more. */
+    var pb = function(n){ return !!(g.buttons[n] && g.buttons[n].pressed); };
+    var fire = pb(0) || pb(2) || pb(7);
+    var tool = pb(1) || pb(3) || pb(6);
+    var cyc = pb(4) || pb(5);
     if(fire && !padPrev){
       input.atk = true;
       if(nonius.on) noniusAnswer(1);
       if(G && (G.dead||G.won)) endRun();
     }
-    padPrev = fire;
+    if(tool && !padToolPrev) input.toolPress = true;
+    if(cyc && !padCyclePrev) input.cycle = true;
+    padPrev = fire; padToolPrev = tool; padCyclePrev = cyc; padToolHeld = tool;
     if(g.buttons[9] && g.buttons[9].pressed && running) doPause();
     if(x||y) return [x,y];
     return [0,0];
   }
-  padPrev = false; return null;
+  padPrev = false; padToolPrev = false; padCyclePrev = false; padToolHeld = false; return null;
 }
 cv.addEventListener('pointerdown', function(e){
   cv.setPointerCapture(e.pointerId);
+  audioUnlock();
   if(nonius.on) return;
+  if(MENU.id){
+    /* Screens with their own confirm() are the one-big-button ones (the child
+       wizard, the alignment answers) — anywhere is the button. List screens
+       split into tap-up / tap-pick / tap-down so a phone with no controller
+       can still drive them. */
+    var s = SCREENS[MENU.id];
+    if(s && s.confirm){ menuConfirm(); return; }
+    var ry = e.clientY / Math.max(VH, 1);
+    if(ry < 0.30) menuNav(0, -1);
+    else if(ry > 0.74) menuNav(0, 1);
+    else menuConfirm();
+    e.preventDefault();
+    return;
+  }
   if(G && (G.dead||G.won)){ endRun(); return; }
   touch.active = true;
   if(e.clientX < VW*0.5){ touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY; }
+  else if(e.clientY < VH*0.4 && G && G.tool){ touch.toolId = e.pointerId; input.toolPress = true; }
   else { input.atk = true; }
   e.preventDefault();
 });
@@ -214,7 +273,10 @@ cv.addEventListener('pointermove', function(e){
   var m = Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
   touch.tx = dx; touch.ty = dy;
 });
-function endTouch(e){ if(e.pointerId===touch.id){ touch.id=-1; touch.tx=0; touch.ty=0; } }
+function endTouch(e){
+  if(e.pointerId===touch.id){ touch.id=-1; touch.tx=0; touch.ty=0; }
+  if(e.pointerId===touch.toolId) touch.toolId = -1;
+}
 cv.addEventListener('pointerup', endTouch);
 cv.addEventListener('pointercancel', endTouch);
 
@@ -236,4 +298,73 @@ function gatherInput(){
   if(!x && !y && tl){ x=tl[0]; y=tl[1]; }
   if(!x && !y && touch.id>=0){ x=touch.tx||0; y=touch.ty||0; }
   input.x = x; input.y = y;
+  input.tool = !!(keys['x'] || keys['k'] || padToolHeld || touch.toolId >= 0);
+}
+
+/* ---------------- controller-native menu input ----------------
+   Gamepads have no events, only state, so menus have to be polled. The
+   UI loop in 70-ui.js calls gatherMenuInput() every frame while a menu
+   is open; repeat timing lives in TUNING.menu so a slow-handed player
+   can be given a longer delay without touching this file. */
+function padBtn(g, i){ return !!(g.buttons[i] && g.buttons[i].pressed); }
+function padSnapshot(){
+  var gp = navigator.getGamepads ? navigator.getGamepads() : [], i, g, ax, ay, st;
+  for(i=0;i<gp.length;i++){
+    g = gp[i]; if(!g) continue;
+    ax = g.axes[0] || 0; ay = g.axes[1] || 0;
+    st = {
+      x: Math.abs(ax) > 0.45 ? (ax > 0 ? 1 : -1) : 0,
+      y: Math.abs(ay) > 0.45 ? (ay > 0 ? 1 : -1) : 0,
+      a: padBtn(g,0) || padBtn(g,2) || padBtn(g,3) || padBtn(g,7),
+      b: padBtn(g,1) || padBtn(g,6),
+      start: padBtn(g,9),
+      lb: padBtn(g,4), rb: padBtn(g,5)
+    };
+    if(padBtn(g,14)) st.x = -1;
+    if(padBtn(g,15)) st.x = 1;
+    if(padBtn(g,12)) st.y = -1;
+    if(padBtn(g,13)) st.y = 1;
+    return st;
+  }
+  return null;
+}
+
+var MENU_KEYDIR = {
+  arrowleft:[-1,0], a:[-1,0], arrowright:[1,0], d:[1,0],
+  arrowup:[0,-1], w:[0,-1], arrowdown:[0,1], s:[0,1]
+};
+var MIN = { x:0, y:0, hold:0, a:false, b:false, start:false, lb:false, rb:false };
+var KREP = { x:0, y:0, hold:0 };
+function gatherMenuInput(){
+  var M = TUNING.menu, rate = Math.max(1, Math.round(M.repeatRate)), kx = 0, ky = 0, p;
+  if(keys['arrowleft'] || keys['a']) kx -= 1;
+  if(keys['arrowright'] || keys['d']) kx += 1;
+  if(keys['arrowup'] || keys['w']) ky -= 1;
+  if(keys['arrowdown'] || keys['s']) ky += 1;
+  /* keyboard: the first step already fired on keydown, so only repeat here */
+  if(kx !== KREP.x || ky !== KREP.y){ KREP.x = kx; KREP.y = ky; KREP.hold = 0; }
+  else if(kx || ky){
+    KREP.hold++;
+    if(KREP.hold > M.repeatDelay && ((KREP.hold - M.repeatDelay) % rate) === 0) menuNav(kx, ky);
+  }
+  /* gamepad: no events exist, so first step and repeat both come from here */
+  p = padSnapshot();
+  if(!p){
+    MIN.a = MIN.b = MIN.start = MIN.lb = MIN.rb = false;
+    MIN.x = MIN.y = 0; MIN.hold = 0;
+    return;
+  }
+  if(p.lb && !MIN.lb) menuNav(-1, 0);
+  if(p.rb && !MIN.rb) menuNav(1, 0);
+  if(p.a && !MIN.a){ audioUnlock(); menuConfirm(); }
+  if(p.b && !MIN.b){ audioUnlock(); menuCancel(); }
+  if(p.start && !MIN.start){ audioUnlock(); menuStart(); }
+  MIN.a = p.a; MIN.b = p.b; MIN.start = p.start; MIN.lb = p.lb; MIN.rb = p.rb;
+  if(p.x !== MIN.x || p.y !== MIN.y){
+    MIN.x = p.x; MIN.y = p.y; MIN.hold = 0;
+    if(p.x || p.y) menuNav(p.x, p.y);
+  } else if(p.x || p.y){
+    MIN.hold++;
+    if(MIN.hold > M.repeatDelay && ((MIN.hold - M.repeatDelay) % rate) === 0) menuNav(p.x, p.y);
+  }
 }
