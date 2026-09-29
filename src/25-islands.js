@@ -51,7 +51,10 @@ function islandCost(n){
   var I = TUNING.islands, k = n - 2;
   return I.unlockBase + I.unlockStep*k + I.unlockGrow*k*(k-1)/2;
 }
-function islandUnlocked(n){ return n === 1 || cfg.allIslands || PROG.stars >= islandCost(n); }
+/* Finishing an island always opens the next one — that is what makes the
+   islands feel like levels. Stars are a second way in, so stars from the
+   arcade games move the sea forward too. */
+function islandUnlocked(n){ return n === 1 || cfg.allIslands || !!PROG.lit[n-1] || PROG.stars >= islandCost(n); }
 function getIsland(n){
   if(!ISLAND_CACHE[n]) ISLAND_CACHE[n] = (n === 1) ? homeIsland() : genIsland(n);
   return ISLAND_CACHE[n];
@@ -86,12 +89,35 @@ function genIsland(n){
   var def = islandDef(n), attempt, isl;
   for(attempt = 0; attempt < 40; attempt++){
     isl = genIslandTry(n, def, islandRng((n*7919 + attempt*104729) >>> 0));
-    if(isl && islandProblems(isl).length === 0){ isl.attempt = attempt; return isl; }
+    if(isl && islandProblems(isl).length === 0){ isl.attempt = attempt; densifyIsland(isl, n); return isl; }
   }
   /* never expected — the smoke test generates every island — but a broken
      island must not take the game down with it */
   var home = homeIsland(); home.id = n; home.fallback = true;
   return home;
+}
+
+/* More to fight, and more on the foe layer: ordinary rooms get extra foes
+   AFTER the island is built, from their own seed. Feeding them through the
+   layout's random stream would have moved every wall and secret on islands
+   he has already explored. Hoppers from island 2, slimes from island 4. */
+function densifyIsland(isl, n){
+  var rnd = islandRng((n*31337 + 7) >>> 0), extra = Math.round(TUNING.islands.extraFoes);
+  var pool = n >= 4 ? ['hopper', 'slime', 'bat'] : (n >= 2 ? ['hopper', 'grub'] : ['grub']);
+  Object.keys(isl.rooms).forEach(function(key){
+    var r = isl.rooms[key];
+    if(key === isl.start || key === isl.boss || r.puzzle) return;
+    var g = roomGrid(r, null), res = {}, i;
+    reserveDoorways(r, res);
+    (r.objs || []).forEach(function(o){ res[o.x + ',' + o.y] = 1; });
+    (r.foes || []).forEach(function(f){ res[f[1] + ',' + f[2]] = 1; });
+    for(i=0; i<extra; i++){
+      var t = pickFree(g, res, rnd, 2, RW-3, 2, RH-3);
+      if(!t) return;
+      res[t[0] + ',' + t[1]] = 1;
+      r.foes.push([pool[Math.floor(rnd()*pool.length)], t[0], t[1]]);
+    }
+  });
 }
 
 /* ---- room-building helpers: a reservation set keeps lanes, doorways and

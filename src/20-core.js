@@ -16,7 +16,7 @@ var WW = RW*TS, WH = RH*TS;
 var cfg = { weakEye:'right', strong:0.40, mode:'rebalance', adapt:true, sep:0, zoom:1.0, tilt:false,
             lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false,
             mute:false, flat:false, kidSet:false,
-            kidMode:true, speakLang:'mn', allIslands:false };
+            kidMode:true, speakLang:'mn', allIslands:false, music:true };
 try{ var raw = localStorage.getItem('gloamhold.cfg'); if(raw){ var o=JSON.parse(raw); for(var k in cfg) if(k in o) cfg[k]=o[k]; } }catch(e){}
 function saveCfg(){ try{ localStorage.setItem('gloamhold.cfg', JSON.stringify(cfg)); }catch(e){} }
 
@@ -165,7 +165,7 @@ var PATTERNS = {
    stone and harmless. They are on floor tiles now, and tests/smoke.mjs checks
    every spawn on every island so it cannot come back. */
 var HOME_ROOMS = {
-  '1,2':{ name:'Threshold',       doors:'new',  pat:'empty',   foes:[['grub',6,3]],
+  '1,2':{ name:'Threshold',       doors:'new',  pat:'empty',   foes:[['grub',6,3],['hopper',9,5]],
           deco:[['bush',1,1],['bush',2,1],['bush',1,2],['bush',11,1],['bush',10,1],['pot',11,2],['bush',1,9],['bush',1,8],['pot',11,9],['bush',10,9]],
           objs:[{k:'sparkle', x:3, y:8, secret:true}] },
   '0,2':{ name:'The Cistern',     doors:'ne',   pat:'pillars', foes:[['grub',3,5],['grub',9,5],['grub',6,8]], drop:'heart',
@@ -175,9 +175,9 @@ var HOME_ROOMS = {
           walls:[[11,2],[10,2]],
           deco:[['bush',1,9],['bush',2,9],['bush',1,8]],
           objs:[{k:'crack', x:10, y:1}, {k:'chest', x:11, y:1, item:'coins', amount:15, secret:true}] },
-  '1,1':{ name:'The Crossing',    doors:'nsew', pat:'cross',   foes:[['bat',3,3],['bat',9,7],['grub',6,5]], lock:{n:'boss'},
+  '1,1':{ name:'The Crossing',    doors:'nsew', pat:'cross',   foes:[['bat',3,3],['bat',9,7],['grub',6,5],['slime',9,3]], lock:{n:'boss'},
           deco:[['pot',1,1],['pot',11,1],['pot',1,9],['pot',11,9]] },
-  '0,1':{ name:'Watchpost',       doors:'nse',  pat:'pillars', foes:[['sentry',2,3],['sentry',10,7],['grub',6,5]],
+  '0,1':{ name:'Watchpost',       doors:'nse',  pat:'pillars', foes:[['sentry',2,3],['sentry',10,7],['grub',6,5],['hopper',6,8]],
           deco:[['bush',1,1],['bush',1,9],['bush',11,1]] },
   '2,1':{ name:'Long Gallery',    doors:'nsw',  pat:'maze',    foes:[['sentry',6,3],['bat',3,6],['bat',9,6],['grub',6,7]], lock:{n:'small'}, drop:'smallkey' },
   '0,0':{ name:'Reliquary',       doors:'s',    pat:'ring',    foes:[['sentry',4,2],['sentry',8,2],['grub',4,8],['grub',8,8]], drop:'bosskey' },
@@ -239,13 +239,22 @@ function newGame(islandId){
   };
   /* stats are cleared BEFORE the first room is entered, so the opening room
      shows up in the log like every other one */
+  resetRunStats('islands');
+  roomState = {};
+  enterRoom(ISLAND.start, null);
+  logContrast();
+}
+
+/* Every activity — the islands and each arcade game — starts a run here, so the
+   session log, the stars and the exposure telemetry mean the same thing in all
+   of them. In an arcade game a "room" is a segment: a level part, a wave, a
+   checkpoint section. */
+function resetRunStats(activity){
   S.started = performance.now(); S.elapsed=0; S.rooms=0; S.cleanRooms=0; S.hits=0; S.kills=0;
   S.trail=[]; S.checks=[]; S.roomLog=[]; S.stepsDown=0; S.stepsUp=0; S.ended=false; S.won=false;
   S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false; S.awarded=false;
   S.coins=0; S.secrets=0; S.firstLight=false; S.sig={ foe:0, item:0, clue:0, any:0 };
-  roomState = {};
-  enterRoom(ISLAND.start, null);
-  logContrast();
+  S.activity = activity || 'islands'; S.bonusStars = 0; S.levelStars = 0; S.level = 0; S.score = 0; S.place = 0;
 }
 
 function enterRoom(key, fromDir){
@@ -257,7 +266,7 @@ function enterRoom(key, fromDir){
   }
   if(G.spec.drop && !st.taken && (st.cleared || G.spec.dropNow)) spawnDrop(key);
   if(G.foes.length===0){ st.cleared = true; }
-  G.cleanRoom = true; G.stepUps = 0;
+  G.cleanRoom = true; stairSegment();
   G.sealed = !!(G.spec.seal && G.foes.length);
   worldEnterRoom(st);
   if(fromDir){

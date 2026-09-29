@@ -169,12 +169,15 @@ function noniusAnswer(a){
 }
 
 /* ---------------- input ---------------- */
-/* atk and toolPress are edges (one press); tool is held (the shield) */
-var input = { x:0, y:0, atk:false, tool:false, toolPress:false, cycle:false };
+/* atk and toolPress are edges (one press); tool is held (the shield); act is
+   the action button HELD (charging a spin, hopping, auto-fire). ax/ay is the
+   right stick, for the arcade games that can aim with it. */
+var input = { x:0, y:0, atk:false, tool:false, toolPress:false, cycle:false, act:false, ax:0, ay:0 };
 var keys = {};
-var touch = { active:false, id:-1, ox:0, oy:0, toolId:-1 };
+var touch = { active:false, id:-1, ox:0, oy:0, toolId:-1, atkId:-1 };
 var tilt = { on:false, base:null, beta:0, gamma:0 };
 var padPrev = false, padToolPrev = false, padCyclePrev = false, padToolHeld = false;
+var padFireHeld = false, padAimX = 0, padAimY = 0;
 
 addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
@@ -200,7 +203,9 @@ addEventListener('keydown', function(e){
   if(!e.repeat && (k==='x'||k==='k')) input.toolPress = true;
   if(!e.repeat && (k==='c'||k==='q'||k==='tab')){ input.cycle = true; e.preventDefault(); }
   if(k==='escape'||k==='p'){ if(running) doPause(); }
-  if(G && (G.dead||G.won) && (e.key===' '||e.key==='Enter')) endRun();
+  /* only the islands end on a key: an arcade run finishes itself, and a
+     finished dungeon's G must not end an arcade game */
+  if(!ARC.id && running && G && (G.dead||G.won) && (e.key===' '||e.key==='Enter')) endRun();
 });
 addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
 
@@ -231,16 +236,19 @@ function readPad(){
     if(fire && !padPrev){
       input.atk = true;
       if(nonius.on) noniusAnswer(1);
-      if(G && (G.dead||G.won)) endRun();
+      if(!ARC.id && running && G && (G.dead||G.won)) endRun();
     }
     if(tool && !padToolPrev) input.toolPress = true;
     if(cyc && !padCyclePrev) input.cycle = true;
-    padPrev = fire; padToolPrev = tool; padCyclePrev = cyc; padToolHeld = tool;
+    padPrev = fire; padToolPrev = tool; padCyclePrev = cyc; padToolHeld = tool; padFireHeld = fire;
+    var rx = g.axes[2] || 0, ry = g.axes[3] || 0;
+    padAimX = Math.abs(rx) > 0.3 ? rx : 0; padAimY = Math.abs(ry) > 0.3 ? ry : 0;
     if(g.buttons[9] && g.buttons[9].pressed && running) doPause();
     if(x||y) return [x,y];
     return [0,0];
   }
-  padPrev = false; padToolPrev = false; padCyclePrev = false; padToolHeld = false; return null;
+  padPrev = false; padToolPrev = false; padCyclePrev = false; padToolHeld = false;
+  padFireHeld = false; padAimX = 0; padAimY = 0; return null;
 }
 cv.addEventListener('pointerdown', function(e){
   cv.setPointerCapture(e.pointerId);
@@ -260,11 +268,11 @@ cv.addEventListener('pointerdown', function(e){
     e.preventDefault();
     return;
   }
-  if(G && (G.dead||G.won)){ endRun(); return; }
+  if(!ARC.id && G && (G.dead||G.won)){ endRun(); return; }
   touch.active = true;
   if(e.clientX < VW*0.5){ touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY; }
-  else if(e.clientY < VH*0.4 && G && G.tool){ touch.toolId = e.pointerId; input.toolPress = true; }
-  else { input.atk = true; }
+  else if(e.clientY < VH*0.4 && (ARC.id || (G && G.tool))){ touch.toolId = e.pointerId; input.toolPress = true; }
+  else { input.atk = true; touch.atkId = e.pointerId; }
   e.preventDefault();
 });
 cv.addEventListener('pointermove', function(e){
@@ -276,6 +284,7 @@ cv.addEventListener('pointermove', function(e){
 function endTouch(e){
   if(e.pointerId===touch.id){ touch.id=-1; touch.tx=0; touch.ty=0; }
   if(e.pointerId===touch.toolId) touch.toolId = -1;
+  if(e.pointerId===touch.atkId) touch.atkId = -1;
 }
 cv.addEventListener('pointerup', endTouch);
 cv.addEventListener('pointercancel', endTouch);
@@ -299,6 +308,8 @@ function gatherInput(){
   if(!x && !y && touch.id>=0){ x=touch.tx||0; y=touch.ty||0; }
   input.x = x; input.y = y;
   input.tool = !!(keys['x'] || keys['k'] || padToolHeld || touch.toolId >= 0);
+  input.act = !!(keys[' '] || keys['j'] || keys['z'] || padFireHeld || touch.atkId >= 0);
+  input.ax = padAimX; input.ay = padAimY;
 }
 
 /* ---------------- controller-native menu input ----------------

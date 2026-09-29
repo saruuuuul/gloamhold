@@ -6,7 +6,7 @@
 
    Which layer each thing is drawn on is the whole design here:
      world (both eyes, full contrast) — bushes, pots, stones, torches
-     clue  (alphaFor 'clue')          — plates, sparkles, cracks, eye switches
+     clue  (alphaFor 'clue')          — plates, sparkles, cracks, eye switches, glow-bugs
      item  (alphaFor 'item')          — chests, coins, keys, anything you GET
    The things he wants to find sit on the per-eye layers, so the
    looking is driven by curiosity and not only by being chased.
@@ -34,6 +34,29 @@ function worldEnterRoom(st){
     return ob;
   });
   G.pushT = 0;
+  /* glow-bugs: a few drift through every ordinary room, a coin each, once.
+     They are on the clue layer, so spotting them is the weaker eye's job. */
+  G.bugs = [];
+  if(!G.spec.puzzle && !G.spec.boss){
+    var W = TUNING.world, b, tries;
+    if(st.bugs == null) st.bugs = W.bugsMin + Math.floor(Math.random()*(W.bugsMax - W.bugsMin + 1));
+    for(b=0; b<st.bugs; b++){
+      for(tries=0; tries<40; tries++){
+        var tx = 2 + Math.floor(Math.random()*(RW - 4)), ty = 2 + Math.floor(Math.random()*(RH - 4));
+        if(G.grid[ty][tx] !== T_FLOOR || objAt(tx, ty)) continue;
+        G.bugs.push({ x:tx*TS + 8, y:ty*TS + 8, vx:0, vy:0, ph:(Math.random()*60)|0 });
+        break;
+      }
+    }
+  }
+}
+function catchBug(i){
+  var b = G.bugs[i], st = rs(G.key);
+  G.bugs.splice(i, 1);
+  st.bugs = Math.max(0, (st.bugs || 1) - 1);
+  G.fx.push({ x:b.x, y:b.y, t:16, type:'bugpop' });
+  addCoins(1); sfx('bug');
+  owlProgress();
 }
 function objAt(tx, ty, kind){
   for(var i=0; i<G.objs.length; i++){
@@ -112,6 +135,10 @@ function worldSwordHit(sb){
     var o = objAt(tx, ty);
     if(o && o.k === 'torch' && !o.lit) lightTorch(o);
     if(o && o.k === 'sparkle' && !o.dug) dig(o);
+  }
+  for(var i = (G.bugs || []).length - 1; i >= 0; i--){
+    var b = G.bugs[i];
+    if(Math.abs(b.x - sb.x) < sb.w/2 + 3 && Math.abs(b.y - sb.y) < sb.h/2 + 3) catchBug(i);
   }
 }
 function cutTile(tx, ty){
@@ -232,7 +259,18 @@ function puzzleSolved(){
   return false;
 }
 function worldTick(){
-  var SL = TUNING.world.pushSlideFrames;
+  var SL = TUNING.world.pushSlideFrames, W = TUNING.world, p = G.p, i;
+  for(i = (G.bugs || []).length - 1; i >= 0; i--){
+    var b = G.bugs[i];
+    b.ph++;
+    b.vx += (Math.random() - 0.5)*0.06; b.vy += (Math.random() - 0.5)*0.06;
+    var sp = Math.hypot(b.vx, b.vy);
+    if(sp > W.bugSpeed){ b.vx *= W.bugSpeed/sp; b.vy *= W.bugSpeed/sp; }
+    var nx = b.x + b.vx, ny = b.y + b.vy;
+    if(nx < TS + 3 || nx > WW - TS - 3 || tileSolid(G.grid[Math.floor(b.y/TS)][Math.floor(nx/TS)])) b.vx = -b.vx; else b.x = nx;
+    if(ny < TS + 3 || ny > WH - TS - 3 || tileSolid(G.grid[Math.floor(ny/TS)][Math.floor(b.x/TS)])) b.vy = -b.vy; else b.y = ny;
+    if(Math.hypot(b.x - p.x, b.y - (p.y - 3)) < W.bugCatch) catchBug(i);
+  }
   G.objs.forEach(function(o){
     if(o.k === 'block' && o.mv){ o.mv.t++; if(o.mv.t >= SL) o.mv = null; }
   });
@@ -249,6 +287,7 @@ function worldTick(){
 /* is anything on the clue layer still waiting to be found? (telemetry + owl) */
 function clueActive(){
   var st = rs(G.key);
+  if(G.bugs && G.bugs.length) return true;
   return G.objs.some(function(o){
     if(o.k === 'plate') return !st.solved;
     if(o.k === 'sparkle') return !o.dug;
@@ -322,6 +361,19 @@ function drawClueObjs(){
       ctx.fillStyle = o.hit ? C.jade : C.bone; ctx.fillRect(x+3, y+6, 10, 5);
       ctx.fillStyle = o.hit ? '#1c3a2c' : C.blood; ctx.fillRect(x+6, y+7, 4, 3);
     }
+  });
+  /* glow-bugs twinkle by growing their wings — shape, never alpha */
+  (G.bugs || []).forEach(function(b){
+    var ph = b.ph % 40, arm = ph < 20 ? 1 + (ph >> 3) : 1 + ((40 - ph) >> 3);
+    ctx.fillStyle = '#e8f08a'; ctx.fillRect(b.x - 1, b.y - 1, 2, 2);
+    ctx.fillStyle = C.bone; ctx.fillRect(b.x - arm - 1, b.y - 0.5, arm, 1); ctx.fillRect(b.x + 1, b.y - 0.5, arm, 1);
+  });
+  /* a caught bug's burst is spawned by the bug, so it stays on its layer */
+  G.fx.forEach(function(e){
+    if(e.type !== 'bugpop') return;
+    var k = 1 - e.t/16, r = 2 + k*7;
+    ctx.fillStyle = '#e8f08a';
+    for(var i=0; i<4; i++){ var a = i*1.5708 + 0.785; ctx.fillRect(e.x + Math.cos(a)*r - 1, e.y + Math.sin(a)*r - 1, 2, 2); }
   });
 }
 /* item layer: chests */

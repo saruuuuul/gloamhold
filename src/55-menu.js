@@ -168,6 +168,7 @@ function drawIcon(name, cx, cy, s, col){
   else if(name === 'sword'){ px(5,0,2,8); px(3,8,6,1); px(5,9,2,3); }
   else if(name === 'key'){ px(4,1,4,4); px(5,5,2,6); px(7,7,2,1); px(7,9,2,1); ctx.fillStyle = C.void; ctx.fillRect(cx-s+p*5, cy-s+p*2, p*2, p*2); }
   else if(name === 'flag'){ px(2,0,2,12); px(4,1,7,5); }
+  else if(name === 'trophy'){ px(2,0,8,5); px(0,1,2,3); px(10,1,2,3); px(3,5,6,1); px(5,6,2,3); px(3,9,6,1); px(2,10,8,2); }
   else if(name === 'bar_v'){ px(5,0,2,12); }
   else if(name === 'bar_h'){ px(0,5,12,2); }
   else px(2,2,8,8);
@@ -330,24 +331,8 @@ function menuTick(){
    ============================================================ */
 function pct(v){ return Math.round(v*100) + '%'; }
 
-SCREENS.title = {
-  title: 'GLOAMHOLD',
-  get sub(){ return PROG.stars ? (PROG.stars + ' stars · ' + PROG.streak + ' day streak')
-                               : 'dichoptic dungeon · side-by-side stereo'; },
-  items: function(){
-    return [
-      { k:'act', icon:'play',    label:'Play',                run: function(){ openMenu('map'); } },
-      { k:'act', icon:'star',    label:'Easy setup',          run: function(){ openMenu('kidIntro'); } },
-      { k:'act', icon:'gear',    label:'Grown-up setup',      run: function(){ openMenu('adult'); } },
-      { k:'act', icon:'cross',   label:'Alignment check',     run: function(){ startNonius(); } },
-      { k:'act', icon:'grid',    label:'Lens grid',           run: function(){ openMenu('lensgrid'); } },
-      { k:'tog', icon: cfg.mute ? 'mute' : 'sound', label:'Sound', get:function(){ return !cfg.mute; }, set:function(v){ cfg.mute = !v; if(v){ audioUnlock(); sfx('uiOk'); } } },
-      { k:'act', icon:'star',    label:'My stars', run: function(){ openMenu('stars'); } },
-      { k:'act', icon:'flat',    label:'Flat menus (no viewer)', run: function(){ goFlat(); } },
-      { k:'act', icon:'info',    label:'Not a medical device', run: function(){ openMenu('safety'); } }
-    ];
-  }
-};
+/* SCREENS.title — the game picker — lives in 58-hub.js. Everything that was
+   on the old title list is on the grown-up screen below. */
 
 SCREENS.adult = {
   title: 'GROWN-UP',
@@ -375,12 +360,18 @@ SCREENS.adult = {
         get:function(){ return TUNING.session.minutes; },
         set:function(v){ TUNING.session.minutes = v; saveTuning(); },
         fmt:function(v){ return v ? v + ' min' : 'no limit'; } },
-      { k:'seg', icon:'sound', label:'Spoken prompts', opts:[['mn','Mongolian'],['en','English'],['off','Off']],
-        get:function(){ return cfg.speakLang; }, set:function(v){ cfg.speakLang = v; if(v!=='off') say('ready'); } },
-      { k:'act', icon:'info', label:'Speech on this device', run:function(){ menuSay('speech: ' + speechStatus()); } },
+      { k:'act', icon:'star', label:'Easy setup (butterfly)', run:function(){ openMenu('kidIntro'); } },
+      { k:'tog', icon: cfg.mute ? 'mute' : 'sound', label:'Sound', get:function(){ return !cfg.mute; }, set:function(v){ cfg.mute = !v; if(v){ audioUnlock(); sfx('uiOk'); } else musicStop(); } },
+      { k:'tog', icon:'sound', label:'Music in intense moments', get:function(){ return cfg.music; }, set:function(v){ cfg.music = v; if(!v) musicStop(); } },
+      { k:'seg', icon:'sound', label:'Spoken prompts', opts:[['mn','Mongolian (else English)'],['en','English'],['off','Off']],
+        get:function(){ return cfg.speakLang; }, set:function(v){ cfg.speakLang = v; if(v!=='off') say('voice_test'); } },
+      { k:'act', icon:'info', label:'Test the voice', run:function(){ speechPrime(); say('voice_test'); menuSay('speech: ' + speechStatus()); } },
+      { k:'act', icon:'star', label:'My stars', run:function(){ openMenu('stars'); } },
       { k:'act', icon:'flag', label:'This run in numbers', run:function(){ openMenu('report'); } },
       { k:'act', icon:'info', label:'What the easy setup measured', run:function(){ openMenu('measured'); } },
       { k:'act', icon:'flat', label:'Advanced tuning (flat panel)', run:function(){ openDevStereo('adult'); } },
+      { k:'act', icon:'flat', label:'Flat menus (no viewer)', run:function(){ goFlat(); } },
+      { k:'act', icon:'info', label:'Not a medical device', run:function(){ openMenu('safety'); } },
       { k:'act', icon:'back', label:'Back', run:function(){ menuCancel(); } }
     ];
   }
@@ -457,17 +448,20 @@ function drawStatBlock(vp, u, y){
 
 SCREENS.pause = {
   title: 'PAUSED',
-  sub: 'gloamhold',
+  get sub(){
+    if(ARC.id && GAMES[ARC.id]) return GAMES[ARC.id].name.toLowerCase() + ' · level ' + S.level;
+    return ISLAND ? ISLAND.name.toLowerCase() : 'gloamhold';
+  },
   hint: 'A pick · B resume · Start resume',
   items: function(){
-    return [
-      { k:'act', icon:'play',  label:'Keep playing',    run:function(){ resumeRun(); } },
-      { k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } },
-      { k:'act', icon:'gear',  label:'Grown-up setup',  run:function(){ openMenu('adult'); } },
-      { k:'act', icon:'star',  label:'Easy setup again',run:function(){ openMenu('kidIntro'); } },
-      { k:'act', icon:'back',  label:'Back to the sea', run:function(){ running = false; S.ended = true; closeMenu(); openMenu('map'); } },
-      { k:'act', icon:'flag',  label:'End session',     run:function(){ endSession(); } }
+    var out = [
+      { k:'act', icon:'play',  label:'Keep playing',      run:function(){ resumeRun(); } },
+      { k:'act', icon:'star',  label:'Back to the games', run:function(){ leaveToHub(); } }
     ];
+    if(!ARC.id) out.push({ k:'act', icon:'back', label:'Back to the sea', run:function(){ running = false; S.ended = true; LIVE = false; closeMenu(); openMenu('map'); } });
+    out.push({ k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } });
+    out.push({ k:'act', icon:'gear',  label:'Grown-up setup',  run:function(){ openMenu('adult'); } });
+    return out;
   },
   cancel: function(){ resumeRun(); }
 };
@@ -475,14 +469,22 @@ SCREENS.pause = {
 /* One result, one button. The numbers a grown-up wants live on SCREENS.report;
    putting them here meant a child met a seven-row table on the worst screen in
    the game, and behind the lens inset the buttons fell off the bottom edge. */
+function nextIsland(){
+  var n = (ISLAND ? ISLAND.id : 1) + 1;
+  return n <= ISLAND_COUNT ? n : 0;
+}
 SCREENS.summary = {
   title: 'RUN OVER',
-  onOpen: function(){ awardSession(); say(S.won ? 'ready' : 'again'); },
+  onOpen: function(){ awardSession(); say(S.won ? (nextIsland() ? 'next_island' : 'ready') : 'again'); },
   nav: function(){},
+  /* A light found is not the end: the boat sails straight on to the next
+     island, which finding this light has just opened. It used to drop him on
+     the map with nothing moving, which read as "the game is over". */
   confirm: function(){
-    sfx('uiOk'); S.ended = true;
-    if(S.won){ closeMenu(); openMenu('map'); } else startRun();
+    sfx('uiOk'); S.ended = true; LIVE = false;
+    if(S.won){ MAP.autoTo = nextIsland(); closeMenu(); openMenu('map'); } else startRun();
   },
+  start: function(){ SCREENS.summary.confirm(); },
   cancel: function(){ closeMenu(); openMenu('title'); },
   custom: function(eye, vp, u){
     drawSimpleScreen(vp, u, {
@@ -501,8 +503,8 @@ SCREENS.summary = {
       },
       big: '+' + S.starsGained + ' stars',
       sub: PROG.stars + ' stars  ·  ' + PROG.streak + ' day streak',
-      button: S.won ? 'SAIL ON' : 'TRY AGAIN',
-      foot: S.won ? 'A to the sea · B title' : 'A try again · B title'
+      button: S.won ? (nextIsland() ? 'NEXT ISLAND' : 'THE SEA') : 'TRY AGAIN',
+      foot: S.won ? 'A sail on · B games' : 'A try again · B games'
     });
   }
 };
@@ -562,6 +564,7 @@ var HUNT = null;
 SCREENS.kidIntro = {
   title: 'READY?',
   onOpen: function(){ say('goggles'); },
+  start: function(){ sfx('uiOk'); openMenu('kidHunt'); },
   custom: function(eye, vp, u){
     drawSimpleScreen(vp, u, {
       title: 'READY?',
@@ -796,7 +799,7 @@ SCREENS.kidDone = {
   title: 'ALL SET',
   onOpen: function(){ sfx('fanfare'); say('ready'); },
   nav: function(){},
-  confirm: function(){ sfx('uiOk'); closeMenu(); startRun(); },
+  confirm: function(){ sfx('uiOk'); playOn(); },
   custom: function(eye, vp, u){
     drawSimpleScreen(vp, u, {
       title: 'ALL SET!',
@@ -863,7 +866,7 @@ SCREENS.noniusResult = {
     drawMenuFoot({ hint:'A play \u00b7 B back' }, vp, u);
   },
   nav: function(){},
-  confirm: function(){ sfx('uiOk'); closeMenu(); startRun(); },
+  confirm: function(){ sfx('uiOk'); playOn(); },
   cancel: function(){ closeMenu(); openMenu('title'); }
 };
 
@@ -876,7 +879,10 @@ SCREENS.noniusResult = {
    ============================================================ */
 var PROG = { stars:0, sessions:0, streak:0, lastDay:'', best:1,
              coins:0, lastIsland:1, tools:{ shield:false, bombs:false, bow:false },
-             lit:{}, secrets:{} };
+             lit:{}, secrets:{},
+             /* the arcade games: level reached and best stars per level; coins to
+                spend in the paint shop (coins stays the lifetime count); colours */
+             games:{}, wallet:0, paint:{}, lastGame:'islands' };
 
 function loadProg(){
   try{
@@ -884,6 +890,8 @@ function loadProg(){
     if(!raw) return;
     var o = JSON.parse(raw);
     for(var k in PROG) if(k in o && typeof o[k] === typeof PROG[k]) PROG[k] = o[k];
+    /* coins collected before the shop existed become spendable */
+    if(!('wallet' in o)) PROG.wallet = PROG.coins;
   }catch(e){}
 }
 function saveProg(){ try{ localStorage.setItem('gloamhold.progress', JSON.stringify(PROG)); }catch(e){} }
@@ -902,7 +910,8 @@ function awardSession(){
   var gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom
              + (S.firstLight ? I.starsIsland : 0)
              + (S.secrets || 0) * I.starsSecret
-             + Math.floor((S.coins || 0) / I.coinsPerStar);
+             + Math.floor((S.coins || 0) / I.coinsPerStar)
+             + (S.levelStars || 0) + (S.bonusStars || 0);
   S.trail.forEach(function(p){ lo = Math.min(lo, p.c); });
   if(S.trail.length && lo < PROG.best - 0.001){ gained += SS.starsImproved; PROG.best = lo; }
   PROG.stars += gained;

@@ -9,7 +9,7 @@
    given up its light shows a beacon, so progress is visible at a
    glance rather than written down.
    ============================================================ */
-var MAP = { sel:1, sail:null };
+var MAP = { sel:1, sail:null, autoTo:0 };
 
 /* a zig-zag across the water, left to right */
 function mapPos(n){
@@ -27,6 +27,14 @@ SCREENS.map = {
   onOpen: function(){
     MAP.sel = Math.max(1, Math.min(ISLAND_COUNT, PROG.lastIsland || 1));
     MAP.sail = null;
+    /* straight on from a light just found: the boat is already moving */
+    var to = MAP.autoTo; MAP.autoTo = 0;
+    if(to && islandUnlocked(to)){
+      MAP.sel = to;
+      MAP.sail = { from:PROG.lastIsland || 1, to:to, t:0 };
+      sfx('sail');
+      return;
+    }
     owlSay('sail', true);
   },
   nav: function(dx, dy){
@@ -44,6 +52,7 @@ SCREENS.map = {
     var d = ISLAND_DEFS[MAP.sel];
     sayLine({ mn: d.mn + ' руу явцгаая!', en: 'Let us sail to ' + d.name + '!' });
   },
+  start: function(){ SCREENS.map.confirm(); },
   cancel: function(){ if(MAP.sail) return; closeMenu(); openMenu('title'); },
   tick: function(){
     if(!MAP.sail) return;
@@ -118,16 +127,16 @@ function drawSeaMap(vp, u){
   } else {
     var h = mapXY(PROG.lastIsland || 1, R); bp = [h[0], h[1] + s*1.35];
   }
-  var bob = Math.sin(MENU.t*0.1)*u*0.4, bx = bp[0], by = bp[1] + bob;
+  var bob = Math.sin(MENU.t*0.1)*u*0.4, bx = bp[0], by = bp[1] + bob, hero = paintOf('hero');
   ctx.fillStyle = '#6b4424'; ctx.fillRect(bx - u*2.4, by, u*4.8, u*1.3);
   ctx.fillRect(bx - u*1.8, by + u*1.3, u*3.6, u*0.7);
   ctx.fillStyle = '#4a3c22'; ctx.fillRect(bx - u*0.2, by - u*3.4, u*0.4, u*3.4);
   ctx.fillStyle = C.bone; ctx.fillRect(bx + u*0.2, by - u*3.2, u*1.8, u*2.4);
-  ctx.fillStyle = C.jade; ctx.fillRect(bx - u*0.9, by - u*1.1, u*0.8, u*1.1);   /* him */
+  ctx.fillStyle = hero.c; ctx.fillRect(bx - u*0.9, by - u*1.1, u*0.8, u*1.1);   /* him */
 
   /* what is selected, and the one button */
   var dsel = ISLAND_DEFS[MAP.sel], openSel = islandUnlocked(MAP.sel);
   mtext(dsel.name, cx, R.y + R.h + u*3.2, u*4, openSel ? dsel.col : '#6a718c', 'center', 600);
   drawBigButton(vp, u, openSel ? 'SAIL' : ('★ ' + islandCost(MAP.sel)), true);
-  drawMenuFoot({ hint:'‹ › island · A sail · B back' }, vp, u);
+  drawMenuFoot({ hint:'‹ › island · A sail · B games' }, vp, u);
 }
