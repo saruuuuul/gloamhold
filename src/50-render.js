@@ -20,6 +20,7 @@ function renderScene(){
   if(VH > VW){ drawRotatePrompt(); return; }
   if(nonius.on){ drawEyeNonius('left'); drawEyeNonius('right'); }
   else if(MENU.id){ drawMenuEye('left'); drawMenuEye('right'); }
+  else if(ARC.id){ drawArcadeEye('left'); drawArcadeEye('right'); }
   else if(G){ drawEye('left'); drawEye('right'); }
   if(cfg.grid){ drawGrid('left'); drawGrid('right'); }
   drawSeam();
@@ -55,12 +56,16 @@ function drawSeam(){
   ctx.fillStyle='#000'; ctx.fillRect(VW/2-1,0,2,VH); ctx.restore();
 }
 
-function eyeGeom(eye){
+/* Fit a W x H field into one eye's viewport. The lensZoom() factor is the
+   overfill that cancels the shader's centre magnification (invariant 5), and
+   the arcade games go through here too, so every game gets the same optics. */
+function fitGeom(eye, W, H){
   var vp = viewportFor(eye);
-  var s = Math.min(vp.w/WW, vp.h/WH) * cfg.zoom * lensZoom();
+  var s = Math.min(vp.w/W, vp.h/H) * cfg.zoom * lensZoom();
   var shift = (eye==='left' ? -cfg.sep/2 : cfg.sep/2);
-  return { vp:vp, s:s, ox: vp.x + (vp.w - WW*s)/2 + shift, oy: vp.y + (vp.h - WH*s)/2 };
+  return { vp:vp, s:s, ox: vp.x + (vp.w - W*s)/2 + shift, oy: vp.y + (vp.h - H*s)/2 };
 }
+function eyeGeom(eye){ return fitGeom(eye, WW, WH); }
 
 function drawEye(eye){
   var g = eyeGeom(eye), vp=g.vp, s=g.s;
@@ -240,30 +245,52 @@ function drawPlayer(){
   if(p.inv > 0 && (G.t>>2)%2 === 0) ctx.globalAlpha = base*0.35;
 
   ctx.fillStyle = '#0b1016'; ctx.fillRect(p.x-5, p.y+5, 10, 2);          /* shadow */
-  ctx.fillStyle = '#22321f';                                              /* boots */
-  ctx.fillRect(p.x-4+step, y+3, 3, 4);
-  ctx.fillRect(p.x+1-step, y+3, 3, 4);
-  ctx.fillStyle = C.jadeDk; ctx.fillRect(p.x-6, y-6, 12, 10);            /* cloak */
-  ctx.fillStyle = C.jade;   ctx.fillRect(p.x-5, y-5, 10, 7);             /* tunic */
-  ctx.fillStyle = C.gold;   ctx.fillRect(p.x-5, y+0, 10, 1);             /* belt  */
-  ctx.fillStyle = '#d9c9a3'; ctx.fillRect(p.x-4, y-10, 8, 5);            /* face  */
-  ctx.fillStyle = C.bone;   ctx.fillRect(p.x-5, y-12, 10, 3);            /* hood  */
-  ctx.fillRect(p.x-5, y-10, 1, 3); ctx.fillRect(p.x+4, y-10, 1, 3);
-  if(p.face === 'n'){ ctx.fillStyle = '#c2b28c'; ctx.fillRect(p.x-4, y-10, 8, 5); }
-  else {
-    ctx.fillStyle = '#0d1520';
-    if(p.face === 's'){ ctx.fillRect(p.x-3, y-8, 2, 2); ctx.fillRect(p.x+1, y-8, 2, 2); }
-    else if(p.face === 'w'){ ctx.fillRect(p.x-4, y-8, 2, 2); }
-    else { ctx.fillRect(p.x+2, y-8, 2, 2); }
-  }
+  drawHeroSprite(p.x, y, p.face, paintOf('hero'), step);
   if(p.flash > 0){
     ctx.globalAlpha = base * (p.flash/TUNING.player.flashFrames) * 0.6;
     ctx.fillStyle = C.blood; ctx.fillRect(p.x-7, y-13, 14, 21);
   }
   ctx.globalAlpha = base;
 }
+/* the hero himself — player layer, both eyes, full contrast — in whatever
+   colour he bought in the paint shop */
+function drawHeroSprite(x, y, face, pt, step){
+  ctx.fillStyle = '#22321f';                                              /* boots */
+  ctx.fillRect(x-4+step, y+3, 3, 4);
+  ctx.fillRect(x+1-step, y+3, 3, 4);
+  ctx.fillStyle = pt.d;     ctx.fillRect(x-6, y-6, 12, 10);              /* cloak */
+  ctx.fillStyle = pt.c;     ctx.fillRect(x-5, y-5, 10, 7);               /* tunic */
+  ctx.fillStyle = C.gold;   ctx.fillRect(x-5, y+0, 10, 1);               /* belt  */
+  ctx.fillStyle = '#d9c9a3'; ctx.fillRect(x-4, y-10, 8, 5);              /* face  */
+  ctx.fillStyle = C.bone;   ctx.fillRect(x-5, y-12, 10, 3);              /* hood  */
+  ctx.fillRect(x-5, y-10, 1, 3); ctx.fillRect(x+4, y-10, 1, 3);
+  if(face === 'n'){ ctx.fillStyle = '#c2b28c'; ctx.fillRect(x-4, y-10, 8, 5); }
+  else {
+    ctx.fillStyle = '#0d1520';
+    if(face === 's'){ ctx.fillRect(x-3, y-8, 2, 2); ctx.fillRect(x+1, y-8, 2, 2); }
+    else if(face === 'w'){ ctx.fillRect(x-4, y-8, 2, 2); }
+    else { ctx.fillRect(x+2, y-8, 2, 2); }
+  }
+}
 function drawSwing(){
-  var p=G.p; if(p.atk<=12) return;
+  var p=G.p, i;
+  /* the spin: the blade sweeps a full circle (player layer) */
+  if(p.spin > 0){
+    var R = TUNING.player.spinRadius, k = 1 - p.spin/TUNING.player.spinFrames;
+    for(i=0; i<4; i++){
+      var a = k*6.2832 - i*0.35 - 1.5708, len = R - i*3;
+      ctx.fillStyle = i === 0 ? C.bone : '#9aa2b8';
+      ctx.fillRect(p.x + Math.cos(a)*len - 2, p.y - 3 + Math.sin(a)*len - 2, 4, 4);
+      ctx.fillRect(p.x + Math.cos(a)*len*0.6 - 1.5, p.y - 3 + Math.sin(a)*len*0.6 - 1.5, 3, 3);
+    }
+  }
+  /* charged and ready: a little star over his head that grows, never fades */
+  if((p.charge || 0) >= TUNING.player.spinChargeFrames){
+    var arm = 2 + ((G.t >> 3) & 1)*1.5;
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(p.x - 0.75, p.y - 17 - arm, 1.5, arm*2); ctx.fillRect(p.x - arm, p.y - 17.75, arm*2, 1.5);
+  }
+  if(p.atk<=12) return;
   var b = swordBox(p);
   ctx.fillStyle = C.bone;
   ctx.fillRect(b.x-b.w/2, b.y-b.h/2, b.w, b.h);
@@ -280,6 +307,29 @@ function drawFoe(f){
   else if(f.type === 'bat') drawBat(f, flash);
   else if(f.type === 'sentry') drawSentry(f, flash);
   else if(f.type === 'boss') drawBoss(f, flash);
+  else if(f.type === 'hopper') drawHopper(f, flash);
+  else if(f.type === 'slime') drawSlime(f, flash);
+}
+/* the frog: its shadow stays on the floor while it flies (foe layer, both) */
+function drawHopper(f, flash){
+  var z = f.z || 0, y = f.y - z, air = z > 1;
+  ctx.fillStyle = '#0b1016'; ctx.fillRect(f.x - 5 + z*0.1, f.y + 4, 10 - z*0.3, 2);
+  ctx.fillStyle = flash ? C.bone : '#3f7a44'; ctx.fillRect(f.x - 6, y - 3, 12, 7);
+  ctx.fillStyle = flash ? C.bone : '#6fcf6f'; ctx.fillRect(f.x - 5, y - 5, 10, 5);
+  ctx.fillStyle = flash ? C.bone : '#2f5a33';
+  if(air){ ctx.fillRect(f.x - 7, y + 3, 3, 3); ctx.fillRect(f.x + 4, y + 3, 3, 3); }
+  else { ctx.fillRect(f.x - 8, y + 2, 4, 2); ctx.fillRect(f.x + 4, y + 2, 4, 2); }
+  ctx.fillStyle = C.bone; ctx.fillRect(f.x - 4, y - 7, 3, 3); ctx.fillRect(f.x + 1, y - 7, 3, 3);
+  ctx.fillStyle = '#12151d'; ctx.fillRect(f.x - 3, y - 6, 1.5, 1.5); ctx.fillRect(f.x + 2, y - 6, 1.5, 1.5);
+}
+function drawSlime(f, flash){
+  var s = f.small ? 0.7 : 1, wob = Math.sin(f.t*0.15)*1.2*s;
+  var w = (13 + wob)*s, h = (10 - wob)*s;
+  ctx.fillStyle = '#0b1016'; ctx.fillRect(f.x - w/2, f.y + h/2 - 1, w, 2);
+  ctx.fillStyle = flash ? C.bone : '#3a6a8a'; ctx.fillRect(f.x - w/2, f.y - h/2 + 2, w, h - 1);
+  ctx.fillStyle = flash ? C.bone : '#5aa8e8'; ctx.fillRect(f.x - w/2 + 1, f.y - h/2, w - 2, h - 3);
+  ctx.fillStyle = flash ? C.bone : '#a9d4f6'; ctx.fillRect(f.x - w/2 + 2, f.y - h/2 + 1, 2*s, 2*s);
+  ctx.fillStyle = '#12151d'; ctx.fillRect(f.x - 3*s, f.y - 1, 2*s, 2*s); ctx.fillRect(f.x + 1*s, f.y - 1, 2*s, 2*s);
 }
 function drawGrub(f, flash){
   var ph = Math.sin(f.t*0.13), sq = ph*1.3;
@@ -324,8 +374,19 @@ function drawSentry(f, flash){
   ctx.fillRect(f.x-7, f.y+5, 14, 2);
 }
 function drawBoss(f, flash){
-  var charging = (f.state === 'charge'), sq = charging ? 2 : 0;
-  ctx.fillStyle = '#0b1016'; ctx.fillRect(f.x-11, f.y+12, 22, 3);
+  var charging = (f.state === 'charge' || f.state === 'windup'), sq = charging ? 2 : 0;
+  var z = f.z || 0;
+  /* its health belongs to it, so it is drawn with it on the foe layer */
+  if(f.maxhp){
+    ctx.fillStyle = '#2d1a1d'; ctx.fillRect(WW/2 - 40, 5, 80, 4);
+    ctx.fillStyle = C.blood; ctx.fillRect(WW/2 - 40, 5, 80*Math.max(0, f.hp)/f.maxhp, 4);
+  }
+  ctx.fillStyle = '#0b1016'; ctx.fillRect(f.x-11 + z*0.1, f.y+12, 22 - z*0.3, 3);
+  if(z > 0){ ctx.save(); ctx.translate(0, -z); }
+  drawBossBody(f, flash, charging, sq);
+  if(z > 0) ctx.restore();
+}
+function drawBossBody(f, flash, charging, sq){
   ctx.fillStyle = flash ? C.bone : '#241b3a'; ctx.fillRect(f.x-13, f.y-13+sq, 26, 26-sq);
   ctx.fillStyle = flash ? C.bone : '#4a3878'; ctx.fillRect(f.x-11, f.y-11+sq, 22, 18-sq);
   ctx.fillStyle = C.gold;
@@ -353,6 +414,11 @@ function drawPoofs(base){
       ctx.fillRect(e.x-2-k*7, e.y-2, 4, 4); ctx.fillRect(e.x-2+k*7, e.y-2, 4, 4);
       ctx.fillRect(e.x-2, e.y-2-k*7, 4, 4); ctx.fillRect(e.x-2, e.y-2+k*7, 4, 4);
       ctx.globalAlpha = base;
+    } else if(e.type === 'quake'){
+      /* the warden's landing ring: it spreads, it does not fade */
+      var qk = 1 - e.t/TUNING.boss.quakeFrames, qr = 6 + qk*TUNING.boss.quakeRadius, qi;
+      ctx.fillStyle = '#a08a64';
+      for(qi=0; qi<16; qi++){ var qa = qi*0.3927; ctx.fillRect(e.x + Math.cos(qa)*qr - 1.5, e.y + Math.sin(qa)*qr*0.6 - 1.5, 3, 3); }
     } else if(e.type === 'spark'){
       var s = e.t/10, i;
       ctx.globalAlpha = base*s;

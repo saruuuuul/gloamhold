@@ -2,6 +2,8 @@
 /* ---------------- UI ---------------- */
 function el(id){ return document.getElementById(id); }
 var running = false, acc = 0, last = 0;
+/* a run is under way (maybe paused behind a menu) — the islands or a game */
+var LIVE = false;
 
 var MODE_HELP = {
   rebalance: 'Both eyes see the whole dungeon. The stronger eye just sees it fainter — the classic contrast-rebalancing arrangement. Safest starting point, and the one to use for a first session.',
@@ -119,10 +121,14 @@ function hideAll(){ ['pTitle','pCheck','pPause','pDev'].forEach(function(p){ el(
 el('btnStart').onclick  = function(){ show('pCheck'); el('checkResult').hidden = true; };
 el('btnBackTitle').onclick = function(){ show('pTitle'); drawPreview(); };
 el('btnCheckShow').onclick = function(){ audioUnlock(); hideAll(); nonius.on = true; el('nonBar').hidden = false; render(); };
-el('btnEnter').onclick  = function(){ audioUnlock(); goImmersive(); keepAwake(); hideAll(); nonius.on=false; if(!G || S.ended) newGame(); running = true; last = performance.now(); requestAnimationFrame(loop); };
+el('btnEnter').onclick  = function(){ startRun(); };
 el('btnResume').onclick = function(){ audioUnlock(); keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
 el('btnRecheck').onclick= function(){ running=false; show('pCheck'); el('checkResult').hidden = true; };
-el('btnQuit').onclick   = function(){ running=false; S.ended=true; letSleep(); show('pTitle'); drawPreview(); };
+el('btnQuit').onclick   = function(){ running=false; S.ended=true; LIVE=false; letSleep(); show('pTitle'); drawPreview(); };
+/* the way back from the flat panels to the viewer — there used to be none, so
+   one tap on "Flat menus" stranded every later launch on this page */
+el('btnStereo').onclick = function(){ leaveFlat(); };
+el('btnStereo2').onclick = function(){ leaveFlat(); };
 Array.prototype.forEach.call(document.querySelectorAll('#nonBar button'), function(b){
   b.onclick = function(){ noniusAnswer(+b.dataset.a); };
 });
@@ -229,7 +235,7 @@ function doPause(){
   openMenu('pause');
 }
 function endRun(){
-  running = false; S.ended = true; S.won = !!(G && G.won);
+  running = false; S.ended = true; LIVE = false; S.won = !!(G && G.won);
   sfx(S.won ? 'win' : 'lose');
   letSleep();
   /* time ran out during this run: end the sitting here, with its stars */
@@ -250,7 +256,9 @@ function startRun(){
   audioUnlock(); goImmersive(); keepAwake();
   closeMenu(); hideAll(); nonius.on = false;
   if(SIT.done) SIT = newSitting();
+  if(ARC.id){ ARC.id = null; S.ended = true; }
   if(!G || S.ended) newGame(CUR_ISLAND);
+  LIVE = true;
   running = true; last = performance.now();
   requestAnimationFrame(loop);
 }
@@ -260,12 +268,22 @@ function resumeRun(){
   requestAnimationFrame(loop);
 }
 function endSession(){
-  running = false; S.ended = true; letSleep();
+  running = false; S.ended = true; LIVE = false; letSleep();
   closeMenu(); openMenu('title'); drawPreview();
 }
+/* "play" from a screen that is not a game: carry on with the run behind the
+   menu if there is one, otherwise go to the game picker */
+function playOn(){
+  if(LIVE && (ARC.id || G)){ resumeRun(); return; }
+  closeMenu(); openMenu('title');
+}
+/* Start in a menu: a screen can say what it means (the picker plays, the
+   sea sails); otherwise it is playOn */
 function menuStart(){
-  if(MENU.id === 'pause') resumeRun();
-  else startRun();
+  if(MENU.id === 'pause'){ resumeRun(); return; }
+  var s = SCREENS[MENU.id];
+  if(s && s.start){ s.start(); return; }
+  playOn();
 }
 function startNonius(){ audioUnlock(); openMenu('nonius'); }
 function goFlat(){
@@ -274,7 +292,9 @@ function goFlat(){
 }
 function leaveFlat(){
   cfg.flat = false; saveCfg();
-  hideAll(); openMenu('title');
+  hideAll();
+  if(LIVE && running === false && (ARC.id || G)) openMenu('pause');
+  else openMenu('title');
 }
 
 /* One persistent frame callback for the menus. Gamepads expose state, not
@@ -285,6 +305,7 @@ var uiRAF = 0;
 function uiLoop(){
   uiRAF = requestAnimationFrame(uiLoop);
   if(running || !MENU.id) return;
+  musicTick(0, true);
   menuTick();
   gatherMenuInput();
   render();
@@ -346,6 +367,7 @@ function loop(now){
   var dt = Math.min(now-last, 120); last = now;
   S.elapsed += dt;
   SIT.ms += dt;
+  if(ARC.id){ arcadeFrame(dt); return; }
   /* exposure telemetry: how long each per-eye layer actually had something
      on it. Not an outcome measure — just whether the game is giving the
      weaker eye anything to do. */
@@ -365,6 +387,7 @@ function loop(now){
   if(toastT>0) toastT--;
   if(S.elapsed - (S.lastLog||0) > 15000){ S.lastLog = S.elapsed; logContrast(); }
   checkSessionGoal();
+  musicTick(dungeonIntense());
   render();
   if((G.dead || G.won) && !G.endT){ G.endT = now; }
   /* an island's light found moves on by itself after a beat — nothing to press */
@@ -398,7 +421,7 @@ function sittingBreakpoint(){
   if(running && SIT.due && !SIT.done) finishSession();
 }
 function finishSession(){
-  SIT.done = true; SIT.due = false;
+  SIT.done = true; SIT.due = false; LIVE = false;
   S.sessionDone = true; S.ended = true;
   running = false; letSleep();
   S.starsGained = awardSession();
@@ -434,7 +457,10 @@ function start(state){
     tilt.on = true; addEventListener('deviceorientation', onTilt);
   }
   newGame(); running = false;
-  if(cfg.flat) show('pTitle'); else openMenu('title');
+  /* always wake up in the viewer menus: the flat panels are a per-visit
+     choice for a grown-up at a desk, never where a launch lands */
+  if(cfg.flat){ cfg.flat = false; saveCfg(); }
+  openMenu(needsTap() ? 'tapStart' : 'title');
   render();
   uiLoop();
 }

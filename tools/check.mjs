@@ -71,6 +71,20 @@ for (const n of jsNames) {
     warn(`${n}: sets globalAlpha and branches on cfg.weakEye — route it through alphaFor(), or mark the file "eye-alpha: intentional — <reason>" if it genuinely must not`);
 }
 if (!/function lensZoom\s*\(/.test(core)) fail('lensZoom() is gone — the lens overfill compensation is missing');
+
+/* every arcade game draws through alphaFor (directly or via withLayer) and
+   reports what its per-eye layers hold, or the exposure log and the layer
+   rules silently stop covering it */
+for (const n of jsNames) {
+  const s2 = read(n);
+  const reg = [...s2.matchAll(/^GAMES\.(\w+)\s*=\s*\{/gm)].map((m) => m[1]);
+  for (const id of reg) {
+    if (id === 'islands' || id === 'shop') continue;
+    if (!/withLayer\(|alphaFor\(/.test(s2)) fail(`${n}: game "${id}" never draws through alphaFor() / withLayer()`);
+    if (!/\bbusy\s*:/.test(s2)) fail(`${n}: game "${id}" has no busy() — its exposure would never be logged`);
+    if (!/\bintense\s*:/.test(s2)) fail(`${n}: game "${id}" has no intense() — the music could never come in`);
+  }
+}
 if (/1\.0 \+ k1 \+ k2/.test(core) !== /1\s*\/\s*\(\s*1\s*\+\s*cfg\.k1\s*\+\s*cfg\.k2\s*\)/.test(core))
   fail('shader normalisation and lensZoom() disagree — the picture will silently zoom');
 

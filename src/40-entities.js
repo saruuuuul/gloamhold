@@ -12,9 +12,23 @@ function mkFoe(type,x,y,opt){
   }
   if(type==='bat')    b.ph = Math.random()*6.28;
   if(type==='sentry') b.cd = (t.cooldown*0.6)|0 + ((Math.random()*t.cooldown*0.6)|0);
-  if(type==='boss'){  b.state='wait'; b.cd=t.restFrames; b.spawned=0; }
+  if(type==='hopper'){ b.z = 0; b.hop = 0; b.cd = (t.hopEvery*(0.4 + Math.random()*0.6))|0; }
+  if(type==='slime' && opt && opt.small){
+    b.small = true; b.hp = t.smallHp; b.w = b.h = 9;
+    b.spd = t.smallSpeed * (cfg.kidMode ? TUNING.session.foeSpeedScale : 1);
+  }
+  if(type==='boss'){
+    b.state='wait'; b.cd=t.restFrames; b.spawned=0; b.z = 0;
+    /* every island's warden has its own way of fighting; from island 5 on it
+       alternates between two of them */
+    var id = ISLAND ? ISLAND.id : 1;
+    b.pattern = BOSS_PATTERNS[(id - 1) % BOSS_PATTERNS.length];
+    b.alt = id >= 5 ? BOSS_PATTERNS[id % BOSS_PATTERNS.length] : null;
+  }
+  b.maxhp = b.hp;
   return b;
 }
+var BOSS_PATTERNS = ['charge', 'ring', 'summon', 'leap'];
 function solidAt(tx,ty){
   if(tx<0||ty<0||tx>=RW||ty>=RH) return true;
   var t = G.grid[ty][tx];
@@ -50,7 +64,12 @@ function unstick(){
   }
 }
 
-/* ---------------- adaptive staircase (3-down / 1-up on contrast) ---------------- */
+/* ---------------- adaptive staircase (3-down / 1-up on contrast) ----------------
+   A SEGMENT is the unit a step is earned in: a dungeon room, or an arcade game's
+   level part, wave or checkpoint section. stairSegment() opens one. The child-mode
+   cap on step-ups counts per segment, whichever game is running. */
+var STAIR = { ups:0 };
+function stairSegment(){ STAIR.ups = 0; }
 function stepDown(){
   if(!cfg.adapt) return;
   var th = TUNING.therapy, q = th.quantise;
@@ -62,10 +81,10 @@ function stepUp(){
   /* Without this cap a child who is struggling gets hit repeatedly, the
      stronger eye is pushed back up each time, and the harder he finds it the
      less dichoptic load he actually receives — the opposite of the point. */
-  if(cfg.kidMode && G && (G.stepUps||0) >= TUNING.session.stepUpsPerRoom) return;
+  if(cfg.kidMode && STAIR.ups >= TUNING.session.stepUpsPerRoom) return;
   var th = TUNING.therapy, q = th.quantise;
   var n = Math.min(1, Math.round((cfg.strong*th.stepUpFactor + th.stepUpFloorBump)/q)*q);
-  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; if(G) G.stepUps = (G.stepUps||0) + 1; syncSliders(); saveCfg(); logContrast(); sfx('stepUp'); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
+  if(n > cfg.strong+0.001){ cfg.strong = n; S.stepsUp++; STAIR.ups++; syncSliders(); saveCfg(); logContrast(); sfx('stepUp'); toast('stronger eye ↑ ' + Math.round(cfg.strong*100) + '%'); }
 }
 var toastTxt='', toastT=0;
 function toast(s){ toastTxt=s; toastT=TUNING.feel.toastFrames; }
@@ -104,6 +123,21 @@ function hurtFoe(f,n){
     G.fx.push({x:f.x,y:f.y,t:22,type:'poof'});
     var idx = G.foes.indexOf(f);
     if(idx >= 0) G.foes.splice(idx,1);
+    /* a slime splits into two quick halves */
+    if(f.type === 'slime' && !f.small){
+      /* the halves bounce apart and cannot be hit for a moment, or the swing
+         that split the slime would take both of them with it */
+      [-1, 1].forEach(function(side){
+        var h = mkFoe('slime', f.x + side*6, f.y, { small:true });
+        h.vx = side*1.6; h.hurt = TUNING.combat.foeHurtFrames + 6;
+        G.foes.push(h);
+      });
+      sfx('split');
+    }
+    /* In child mode a beaten foe is worth a coin, straight to the counter.
+       Not dropped on the floor: in forced fusion a coin appearing where a foe
+       died would show the stronger eye where a foe it cannot see had been. */
+    if(cfg.kidMode && f.type !== 'boss') addCoins(1);
     /* the warden does not end the run by dying: it leaves this island's
        light behind, and picking THAT up is the moment the island is done */
     if(f.type === 'boss'){
@@ -149,7 +183,7 @@ function grantItem(item, amount){
     PROG.tools[item] = true; G.tool = item; saveProg();
   }
 }
-function addCoins(n){ G.coins += n; S.coins += n; PROG.coins += n; }
+function addCoins(n){ G.coins += n; S.coins += n; PROG.coins += n; PROG.wallet += n; }
 function startHold(item){
   G.hold = { item:item, t:TUNING.world.holdFrames };
   sfx(item === 'orb' ? 'fanfare' : 'chest');
@@ -202,17 +236,33 @@ function update(){
   worldPush(ix, iy);
   if(p.inv>0) p.inv--; if(p.flash>0) p.flash--;
   /* one button: open or dig if there is something to open or dig, else swing */
-  if(input.atk && p.atk<=0 && !worldInteract()){
+  if(input.atk && p.atk<=0 && !p.spin && !worldInteract()){
     p.atk = PT.atkFrames; sfx('swing'); G.fx.push({x:p.x,y:p.y,t:8,type:'swing',face:p.face});
   }
   input.atk = false;
+  /* keep holding after the swing and the sword charges; let go and it goes
+     all the way round */
+  if(input.act && p.atk <= 0 && !p.spin){
+    p.charge = (p.charge || 0) + 1;
+    if(p.charge === PT.spinChargeFrames) sfx('charged');
+  } else if(!input.act){
+    if((p.charge || 0) >= PT.spinChargeFrames && !p.spin){ p.spin = PT.spinFrames; sfx('spin'); }
+    p.charge = 0;
+  }
 
   /* sword hitbox */
   if(p.atk > PT.atkFrames - PT.atkActiveFrom){
     var sb = swordBox(p);
-    for(i=G.foes.length-1;i>=0;i--){ f=G.foes[i]; if(f.hurt<=0 && overlap(sb,f)) hurtFoe(f,1); }
+    for(i=G.foes.length-1;i>=0;i--){ f=G.foes[i]; if(f && f.hurt<=0 && !(f.z > 6) && overlap(sb,f)) hurtFoe(f,1); }
     for(i=G.shots.length-1;i>=0;i--){ if(overlap(sb,G.shots[i])) G.shots.splice(i,1); }
     worldSwordHit(sb);
+  }
+  if(p.spin > 0){
+    p.spin--;
+    var R = PT.spinRadius, spinBox = { x:p.x, y:p.y, w:R*2, h:R*2 };
+    for(i=G.foes.length-1;i>=0;i--){ f=G.foes[i]; if(f && f.hurt<=0 && !(f.z > 6) && Math.hypot(f.x-p.x, f.y-p.y) < R + f.w/2) hurtFoe(f,1); }
+    for(i=G.shots.length-1;i>=0;i--){ if(Math.hypot(G.shots[i].x-p.x, G.shots[i].y-p.y) < R) G.shots.splice(i,1); }
+    worldSwordHit(spinBox);
   }
   toolsTick();
 
@@ -238,14 +288,26 @@ function update(){
         G.shots.push({x:f.x,y:f.y,vx:ax*TF.shotSpeed,vy:ay*TF.shotSpeed,w:6,h:6,life:TF.shotLife});
         sfx('shot');
       }
+    } else if(f.type==='hopper'){
+      /* sits, then leaps at where he was standing */
+      if(f.hop > 0){
+        f.hop--;
+        f.z = Math.sin((1 - f.hop/TF.hopFrames)*Math.PI)*TF.hopHeight;
+        f.vx = f.hx; f.vy = f.hy;
+        if(f.hop === 0){ f.z = 0; f.vx *= 0.3; f.vy *= 0.3; }
+      } else {
+        f.vx *= TF.friction; f.vy *= TF.friction;
+        if(--f.cd <= 0){ f.cd = TF.hopEvery + ((Math.random()*30)|0); f.hop = TF.hopFrames; f.hx = dx/d*f.spd; f.hy = dy/d*f.spd; sfx('frog'); }
+      }
+    } else if(f.type==='slime'){
+      f.vx = f.vx*TF.friction + (dx/d)*f.spd*TF.accel;
+      f.vy = f.vy*TF.friction + (dy/d)*f.spd*TF.accel;
     } else if(f.type==='boss'){
-      f.cd--;
-      if(f.state==='wait'){ f.vx*=0.9; f.vy*=0.9; if(f.cd<=0){ f.state='charge'; f.cd=TF.chargeFrames; f.dirx=dx/d; f.diry=dy/d; sfx('bossWake'); } }
-      else { f.vx = f.dirx*f.spd*TF.chargeBoost; f.vy = f.diry*f.spd*TF.chargeBoost; if(f.cd<=0){ f.state='wait'; f.cd=TF.restFrames; } }
-      if(f.hp<=TF.spawnBelowHp && f.spawned<TF.maxSpawns && f.t%TF.spawnEvery===0){ f.spawned++; G.foes.push(mkFoe('bat', f.x+20, f.y)); }
+      bossTick(f, TF, dx, dy, d);
     }
-    moveBody(f, f.vx, 0); moveBody(f, 0, f.vy);
-    if(overlap(p,f)){
+    if(f.type === 'boss' && f.state === 'leap'){ f.x += f.vx; f.y += f.vy; }
+    else { moveBody(f, f.vx, 0); moveBody(f, 0, f.vy); }
+    if(overlap(p,f) && !(f.z > 6)){
       if(p.shield && facingToward(p, f.x, f.y)){
         var ka = Math.atan2(f.y-p.y, f.x-p.x);
         f.vx = Math.cos(ka)*TUNING.combat.foeKnockback*1.4; f.vy = Math.sin(ka)*TUNING.combat.foeKnockback*1.4;
@@ -293,6 +355,80 @@ function update(){
   checkDoors();
 }
 function stepFx(){ for(var i=G.fx.length-1;i>=0;i--){ G.fx[i].t--; if(G.fx[i].t<=0) G.fx.splice(i,1); } }
+
+/* ---------------- the wardens ----------------
+   charge (island 1): rests, then charges; bats come once it is hurt
+   ring:   winds up, then fires a ring of shots
+   summon: winds up, then calls grubs and bats (never more than summonMax)
+   leap:   jumps to where he stands and lands with a shockwave
+   The windup is a tell he can learn: the eyes go gold before anything happens. */
+function bossTick(f, TF, dx, dy, d){
+  var pat = f.pattern || 'charge', i;
+  f.cd--;
+  if(pat === 'charge'){
+    if(f.state==='wait'){ f.vx*=0.9; f.vy*=0.9; if(f.cd<=0){ f.state='charge'; f.cd=TF.chargeFrames; f.dirx=dx/d; f.diry=dy/d; sfx('bossWake'); } }
+    else { f.vx = f.dirx*f.spd*TF.chargeBoost; f.vy = f.diry*f.spd*TF.chargeBoost; if(f.cd<=0){ f.state='wait'; f.cd=TF.restFrames; bossNext(f); } }
+    if(f.hp<=TF.spawnBelowHp && f.spawned<TF.maxSpawns && f.t%TF.spawnEvery===0){ f.spawned++; G.foes.push(mkFoe('bat', f.x+20, f.y)); }
+    return;
+  }
+  if(f.state === 'wait'){
+    f.vx = f.vx*0.9 + (dx/d)*f.spd*0.08; f.vy = f.vy*0.9 + (dy/d)*f.spd*0.08;
+    if(f.cd <= 0){ f.state = 'windup'; f.cd = TF.windupFrames; sfx('windup'); }
+    return;
+  }
+  if(f.state === 'windup'){
+    f.vx *= 0.8; f.vy *= 0.8;
+    if(f.cd > 0) return;
+    if(pat === 'ring'){
+      var n = Math.round(TF.ringShots), off = (f.t % 60)*0.05;
+      for(i=0; i<n; i++){
+        var a = off + i*6.2832/n;
+        G.shots.push({ x:f.x, y:f.y, vx:Math.cos(a)*TF.ringShotSpeed, vy:Math.sin(a)*TF.ringShotSpeed, w:6, h:6, life:230 });
+      }
+      sfx('ring');
+      f.state = 'wait'; f.cd = Math.round(TF.restFrames*1.6); bossNext(f);
+    } else if(pat === 'summon'){
+      var alive = G.foes.length - 1;
+      for(i=0; i<TF.summonCount && alive < TF.summonMax; i++, alive++){
+        var kind = (f.t >> 4) % 2 ? 'grub' : 'bat', sx = f.x + (i ? 22 : -22);
+        sx = Math.max(TS*2, Math.min(WW - TS*2, sx));
+        G.foes.push(mkFoe(kind, sx, f.y + 10));
+        G.fx.push({ x:sx, y:f.y + 10, t:22, type:'poof' });
+      }
+      sfx('bossWake');
+      f.state = 'wait'; f.cd = Math.round(TF.restFrames*2.2); bossNext(f);
+    } else {
+      /* the leap: aim at where he is now, clamped inside the room */
+      var tx = Math.max(TS*2, Math.min(WW - TS*2, G.p.x)), ty = Math.max(TS*2, Math.min(WH - TS*2, G.p.y));
+      f.state = 'leap'; f.cd = TF.leapFrames; f.lx = tx; f.ly = ty;
+      f.vx = (tx - f.x)/TF.leapFrames; f.vy = (ty - f.y)/TF.leapFrames;
+      sfx('frog');
+    }
+    return;
+  }
+  if(f.state === 'leap'){
+    f.z = Math.sin((1 - f.cd/TF.leapFrames)*Math.PI)*TF.leapHeight;
+    if(f.cd <= 0){
+      f.z = 0; f.vx = f.vy = 0; f.state = 'wait'; f.cd = Math.round(TF.restFrames*1.4);
+      G.fx.push({ x:f.x, y:f.y, t:TF.quakeFrames, type:'quake' });
+      sfx('quake');
+      if(Math.hypot(G.p.x - f.x, G.p.y - f.y) < TF.quakeRadius) hurtPlayer(1, f.x, f.y);
+      unstick();
+      bossNext(f);
+    }
+  }
+}
+function bossNext(f){ if(f.alt){ var t = f.pattern; f.pattern = f.alt; f.alt = t; f.state = 'wait'; } }
+/* how intense this moment is, 0..1 — the carol comes in above music.startAt */
+function dungeonIntense(){
+  if(!G || G.dead || G.won || G.hold) return 0;
+  var v = 0, i;
+  for(i=0; i<G.foes.length; i++) if(G.foes[i].type === 'boss') return 1;
+  if(G.sealed && G.foes.length) v = 0.7;
+  if(G.p.hp <= 2 && G.foes.length) v = Math.max(v, 0.8);
+  if(G.foes.length >= 5) v = Math.max(v, 0.62);
+  return v;
+}
 
 function swordBox(p){
   var L=TUNING.player.swordLength, W=TUNING.player.swordWidth, o=TUNING.player.swordReach;

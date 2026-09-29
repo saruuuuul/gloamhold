@@ -89,7 +89,7 @@ function hiss(o, bus){
 }
 function busGain(bus){
   var a = TUNING.audio;
-  return bus === 'ui' ? a.ui : a.game;
+  return bus === 'ui' ? a.ui : (bus === 'music' ? a.music : a.game);
 }
 function arp(freqs, step, o, bus){
   for(var i=0;i<freqs.length;i++){
@@ -159,13 +159,67 @@ var SFX = {
   block:   function(){ tone({ f:1100, to:700, dur:0.06, type:'square', v:0.14 }, 'game'); },
 
   /* the sea */
-  sail:    function(){ hiss({ hz:700, dur:0.9, v:0.14, type:'lowpass' }, 'ui'); arp([392, 494, 587], 0.16, { dur:0.25, type:'triangle', v:0.2 }, 'ui'); }
+  sail:    function(){ hiss({ hz:700, dur:0.9, v:0.14, type:'lowpass' }, 'ui'); arp([392, 494, 587], 0.16, { dur:0.25, type:'triangle', v:0.2 }, 'ui'); },
+
+  /* the dungeon, grown */
+  charged: function(){ tone({ f:1400, dur:0.05, type:'sine', v:0.14 }, 'game'); tone({ f:2100, dur:0.06, type:'sine', v:0.1, delay:0.05 }, 'game'); },
+  spin:    function(){ hiss({ hz:1500, dur:0.22, v:0.22, q:0.7 }, 'game'); tone({ f:500, to:1100, dur:0.2, type:'triangle', v:0.16 }, 'game'); },
+  bug:     function(){ arp([1568, 2093], 0.04, { dur:0.06, type:'sine', v:0.16 }, 'game'); },
+  frog:    function(){ tone({ f:260, to:520, dur:0.08, type:'square', v:0.1 }, 'game'); },
+  split:   function(){ tone({ f:420, to:180, dur:0.12, type:'triangle', v:0.2 }, 'game'); hiss({ hz:900, dur:0.08, v:0.12 }, 'game'); },
+  windup:  function(){ tone({ f:180, to:360, dur:0.5, type:'sawtooth', v:0.16 }, 'game'); },
+  ring:    function(){ tone({ f:700, to:350, dur:0.18, type:'square', v:0.16 }, 'game'); },
+  quake:   function(){ tone({ f:70, to:40, dur:0.45, type:'sawtooth', v:0.3 }, 'game'); hiss({ hz:160, dur:0.4, v:0.26, type:'lowpass' }, 'game'); },
+
+  /* arcade, shared */
+  go:      function(){ arp([523, 784], 0.12, { dur:0.16, type:'square', v:0.2 }, 'game'); },
+  levelUp: function(){ arp([523, 659, 784, 1047, 1319, 1568], 0.075, { dur:0.18, type:'triangle', v:0.26 }, 'game'); },
+  trophy:  function(){ arp([392, 523, 659, 784, 1047], 0.13, { dur:0.34, type:'triangle', v:0.28 }, 'ui'); hiss({ hz:5000, dur:0.6, v:0.05, q:0.4, delay:0.5 }, 'ui'); },
+  bump:    function(){ tone({ f:160, to:110, dur:0.08, type:'square', v:0.18 }, 'game'); },
+  oof:     function(){ tone({ f:300, to:120, dur:0.25, type:'sawtooth', v:0.2 }, 'game'); hiss({ hz:500, dur:0.2, v:0.14, type:'lowpass' }, 'game'); },
+
+  /* Blocks */
+  bMove:   function(){ tone({ f:600, dur:0.02, type:'square', v:0.06 }, 'game'); },
+  bRotate: function(){ tone({ f:880, to:990, dur:0.03, type:'square', v:0.08 }, 'game'); },
+  bLock:   function(){ tone({ f:220, to:160, dur:0.06, type:'triangle', v:0.18 }, 'game'); },
+  bDrop:   function(){ hiss({ hz:600, dur:0.08, v:0.16, type:'lowpass' }, 'game'); tone({ f:180, to:90, dur:0.08, type:'square', v:0.16 }, 'game'); },
+  /* each line in a row of clears climbs a step: combo is the argument */
+  bLine:   function(k){ var f = 523 * Math.pow(1.122, Math.min(12, k || 0)); arp([f, f*1.26, f*1.5], 0.05, { dur:0.1, type:'square', v:0.18 }, 'game'); },
+  bBig:    function(){ arp([523, 659, 784, 1047, 784, 1047, 1319], 0.06, { dur:0.14, type:'square', v:0.22 }, 'game'); },
+  bGem:    function(){ arp([1319, 1760, 2637], 0.05, { dur:0.12, type:'sine', v:0.2 }, 'game'); },
+  bSweep:  function(){ hiss({ hz:1200, dur:0.6, v:0.2, q:0.5 }, 'game'); tone({ f:900, to:200, dur:0.55, type:'triangle', v:0.16 }, 'game'); },
+
+  /* Space Rocks */
+  laser:   function(k){ tone({ f:1500 + (k||0)*40, to:700, dur:0.05, type:'square', v:0.07 }, 'game'); },
+  rockHit: function(s){ tone({ f:[0, 520, 330, 200][s||1] || 300, to:90, dur:0.14, type:'sawtooth', v:0.2 }, 'game'); hiss({ hz:700, dur:0.12, v:0.18, type:'lowpass' }, 'game'); },
+  saucer:  function(){ tone({ f:900, to:1200, dur:0.12, type:'sine', v:0.08 }, 'game'); tone({ f:1200, to:900, dur:0.12, type:'sine', v:0.08, delay:0.12 }, 'game'); },
+  powerUp: function(){ arp([660, 880, 1100, 1320], 0.05, { dur:0.1, type:'square', v:0.18 }, 'game'); },
+  shield:  function(){ tone({ f:300, to:900, dur:0.2, type:'sine', v:0.18 }, 'game'); },
+  shipHit: function(){ tone({ f:400, to:80, dur:0.4, type:'sawtooth', v:0.26 }, 'game'); hiss({ hz:400, dur:0.35, v:0.2, type:'lowpass' }, 'game'); },
+
+  /* Racer */
+  overtake:function(){ tone({ f:988, dur:0.05, type:'square', v:0.12 }, 'game'); tone({ f:1319, dur:0.08, type:'square', v:0.12, delay:0.05 }, 'game'); },
+  skid:    function(){ hiss({ hz:2200, dur:0.35, v:0.14, q:3 }, 'game'); },
+  crash:   function(){ tone({ f:200, to:50, dur:0.35, type:'square', v:0.26 }, 'game'); hiss({ hz:900, dur:0.3, v:0.24 }, 'game'); },
+  nitro:   function(){ hiss({ hz:900, dur:0.7, v:0.2, type:'lowpass' }, 'game'); tone({ f:200, to:600, dur:0.6, type:'sawtooth', v:0.12 }, 'game'); },
+  checkpoint: function(){ arp([784, 988, 1175], 0.07, { dur:0.12, type:'triangle', v:0.2 }, 'game'); },
+
+  /* Gator Truck */
+  hop:     function(){ tone({ f:300, to:620, dur:0.1, type:'square', v:0.16 }, 'game'); },
+  land:    function(){ hiss({ hz:300, dur:0.1, v:0.2, type:'lowpass' }, 'game'); tone({ f:120, to:70, dur:0.08, type:'triangle', v:0.2 }, 'game'); },
+  crunch:  function(){ hiss({ hz:1600, dur:0.18, v:0.26, q:0.8 }, 'game'); tone({ f:240, to:80, dur:0.16, type:'square', v:0.22 }, 'game'); },
+  honk:    function(){ tone({ f:392, dur:0.16, type:'square', v:0.14 }, 'game'); tone({ f:494, dur:0.16, type:'square', v:0.12 }, 'game'); },
+  transform: function(){ arp([392, 523, 784, 1047], 0.05, { dur:0.08, type:'square', v:0.16 }, 'game'); hiss({ hz:3000, dur:0.25, v:0.1, q:0.6 }, 'game'); },
+  splash:  function(){ hiss({ hz:900, dur:0.4, v:0.22, q:0.6 }, 'game'); },
+  bubble:  function(){ tone({ f:700, to:1300, dur:0.06, type:'sine', v:0.1 }, 'game'); },
+  balloon: function(){ hiss({ hz:3000, dur:0.06, v:0.2, q:0.8 }, 'game'); arp([1047, 1319], 0.05, { dur:0.08, type:'sine', v:0.16 }, 'game'); },
+  flip:    function(){ arp([784, 1047, 1319, 1568], 0.045, { dur:0.08, type:'triangle', v:0.22 }, 'game'); }
 };
 
-function sfx(name){
+function sfx(name, arg){
   if(!audioLive()) return;
   var f = SFX[name];
-  if(f) try{ f(); }catch(e){}
+  if(f) try{ f(arg); }catch(e){}
 }
 
 /* ============================================================
@@ -213,7 +267,36 @@ var SPEECH = {
 
   /* the sea */
   sail:    { mn:'Далайд гарцгаая!',                         en:'Let us set sail!' },
-  more_stars: { mn:'Илүү од цуглуулаарай.',                 en:'Collect more stars first.' }
+  more_stars: { mn:'Илүү од цуглуулаарай.',                 en:'Collect more stars first.' },
+  next_island: { mn:'Дараагийн арал руу!',                  en:'On to the next island!' },
+
+  /* the game picker: each game says its own name */
+  g_islands: { mn:'Арлын адал явдал',                       en:'Island adventure' },
+  g_truck:   { mn:'Матар машин',                            en:'Gator truck' },
+  g_blocks:  { mn:'Блок',                                   en:'Blocks' },
+  g_rocks:   { mn:'Сансрын чулуу',                          en:'Space rocks' },
+  g_race:    { mn:'Уралдаан',                               en:'Racing' },
+  g_shop:    { mn:'Будгийн дэлгүүр',                        en:'Paint shop' },
+
+  /* cheers and prompts shared by the arcade games */
+  go:        { mn:'Явцгаая!',                               en:'Let us go!' },
+  wow:       { mn:'Гайхалтай!',                             en:'Wow!' },
+  level:     { mn:'Дараагийн шат!',                         en:'Next level!' },
+  trophy:    { mn:'Цом авлаа!',                             en:'You won a trophy!' },
+  newthing:  { mn:'Шинэ зүйл гарч ирлээ!',                  en:'Something new!' },
+  oops_ok:   { mn:'Зүгээр дээ, үргэлжлүүлье!',              en:'That is okay, keep going!' },
+  bigjump:   { mn:'Том үсрэлт!',                            en:'Big jump!' },
+  hop:       { mn:'А товчоор үсэр!',                        en:'Press A to jump!' },
+  t_sub:     { mn:'B товчоор шумбагч болоорой!',            en:'Press B to become a submarine!' },
+  t_mini:    { mn:'B товчоор жижиг машин болоорой!',        en:'Press B to become a mini truck!' },
+  t_truck:   { mn:'B товчоор том машин болоорой!',          en:'Press B to become a big truck!' },
+  wave:      { mn:'Шинэ давалгаа ирлээ!',                   en:'Here comes a wave!' },
+  boss_rock: { mn:'Чулуун хаан ирлээ!',                     en:'The rock king is here!' },
+  finish:    { mn:'Барианд орлоо!',                         en:'Finish!' },
+  place1:    { mn:'Нэгдүгээр байр!',                        en:'First place!' },
+  newcol:    { mn:'Шинэ өнгө!',                             en:'A new colour!' },
+  more_coins:{ mn:'Илүү зоос цуглуулаарай.',                en:'Collect more coins first.' },
+  voice_test:{ mn:'Сайн байна уу! Би ярьж чадна.',          en:'Hello! I can talk.' }
 };
 
 function speechVoices(){
@@ -228,10 +311,39 @@ function speechVoiceFor(lang){
   }
   return null;
 }
+/* Which voice speaks, and in which language. Mongolian voices are rare on
+   phones, so without one the ENGLISH line is spoken by an English voice —
+   never the Cyrillic text by an English voice, which is noise to a child. */
+function speechPick(){
+  if(cfg.speakLang === 'off') return null;
+  var v = speechVoiceFor(cfg.speakLang);
+  if(v) return { voice:v, lang:cfg.speakLang };
+  if(cfg.speakLang !== 'en'){
+    var e = speechVoiceFor('en');
+    if(e) return { voice:e, lang:'en' };
+  }
+  return null;
+}
 function speechStatus(){
   if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return 'unsupported';
   if(cfg.speakLang === 'off') return 'off';
-  return speechVoiceFor(cfg.speakLang) ? 'ready' : 'no voice';
+  var pk = speechPick();
+  if(!pk) return 'no voice';
+  if(pk.lang === cfg.speakLang) return cfg.speakLang === 'mn' ? 'mongolian' : 'english';
+  return 'english (no mongolian voice)';
+}
+/* Chrome only lets a page speak after a real tap or key. Speaking one silent
+   utterance inside that gesture opens the door for every line after it. */
+var speechPrimed = false;
+function speechPrime(){
+  if(speechPrimed) return;
+  try{
+    if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+    var u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    speechPrimed = true;
+  }catch(e){}
 }
 function say(key){ sayLine(SPEECH[key]); }
 /* for lines built at runtime, like "let's sail to Blue Isle" */
@@ -240,11 +352,14 @@ function sayLine(line){
   if(!line) return;
   try{
     if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
-    var v = speechVoiceFor(cfg.speakLang);
-    if(!v) return;
-    var text = line[cfg.speakLang] || line.en;
+    var pk = speechPick();
+    if(!pk) return;
+    var v = pk.voice;
+    var text = line[pk.lang] || line.en;
     if(!text) return;
-    window.speechSynthesis.cancel();
+    /* only cancel something that is actually playing: on Chrome for Android a
+       speak() issued straight after cancel() is sometimes dropped */
+    if(window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(text);
     u.voice = v; u.lang = v.lang;
     u.rate = TUNING.audio.speechRate;
