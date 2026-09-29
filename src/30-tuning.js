@@ -172,12 +172,21 @@ var TUNING_DEFAULTS = {
     jumpFrames: 34, jumpHeight: 9, boostFrames: 60, nitroFrames: 90, boostGain: 1.45, curveAmp: 26
   },
 
-  /* ---- Gator Truck (side view) ---- */
+  /* ---- Gator Truck (side view) ----
+     The stick is only ever the gas. In the air the truck levels itself to
+     land on its wheels (levelRate, radians per frame); holding A in the air
+     is what flips it (flipRate, after flipDelay frames). slopePull is how much
+     of gravity's pull a slope puts on the truck — under 1 so the engine always
+     wins a hill. A landing crooked by more than landTol (kidLandTol in child
+     mode) is a crash. liftDrop is how far the ground must fall away before
+     the truck leaves it, so small bumps do not throw it in the air. */
   truck: {
-    gravity: 0.12, moonGravity: 0.05, accel: 0.04, maxSpeed: 1.7, miniSpeed: 1.9,
+    gravity: 0.12, moonGravity: 0.05, accel: 0.05, maxSpeed: 1.7, miniSpeed: 1.9,
     subLandSpeed: 0.45, subSwim: 0.05, subMax: 1.2, hopV: 2.6, miniHopV: 2.1, drag: 0.99,
-    lean: 0.010, leanDamp: 0.92, landTol: 1.2, flipStarsMax: 3, crashFrames: 60, stageBase: 2200, stageStep: 250,
-    hintSec: 4, autoSec: 9, flipStars: 1, crushCoins: 3, bounce: 1.4
+    slopePull: 0.55, liftDrop: 3, maxTurn: 0.08, lipGrace: 8, lipKick: 1.3,
+    flipRate: 0.26, flipDelay: 4, flipSafeFrames: 12, levelRate: 0.1,
+    landTol: 1.2, kidLandTol: 2.0, flipStarsMax: 3, crashFrames: 60, stageBase: 2200, stageStep: 250,
+    hintSec: 4, autoSec: 9, flipStars: 1, crushCoins: 3, bounce: 0.9
   }
 };
 
@@ -205,8 +214,9 @@ function walkTuning(obj, prefix, out){
 }
 /* Saved tuning holds every number, so a changed default never reaches a phone
    that has ever saved it. A revision bump drops just the stored values whose
-   defaults moved on purpose. Rev 2: the session no longer ends at 12 minutes. */
-var TUNING_REV = 2;
+   defaults moved on purpose. Rev 2: the session no longer ends at 12 minutes.
+   Rev 3: the truck's handling was rebuilt, so its old numbers do not apply. */
+var TUNING_REV = 3;
 function loadTuning(){
   try{
     var raw = localStorage.getItem('gloamhold.tuning');
@@ -215,6 +225,7 @@ function loadTuning(){
     if(!raw) return;
     var o = JSON.parse(raw);
     if(rev < 2 && o.session) delete o.session.minutes;
+    if(rev < 3) delete o.truck;
     (function merge(dst, src){
       for(var k in src){
         if(src[k] && typeof src[k]==='object' && dst[k] && typeof dst[k]==='object') merge(dst[k], src[k]);

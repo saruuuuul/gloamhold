@@ -192,7 +192,9 @@ level ends on one big NEXT button and 1–3 stars, and the next run starts at th
 level or two brings one new thing.
 
 **Gator Truck** — a side-view monster truck with a gator at the wheel, in the spirit of
-*Rallygator*'s transforming truck (our own art and courses). The stick drives, **A** hops,
+*Rallygator*'s transforming truck (our own art and courses). The stick is the gas and the
+brake and nothing else — in the air the truck turns itself to land on its wheels. **A** hops,
+**holding A in the air** spins a flip (in child mode it always comes round in time to land),
 **B** transforms at a gate: the *truck* crushes junk cars for coins and hops boulders, the
 *mini* fits through tunnels, the *sub* dives through lakes. Every gate has a sign showing the
 form it needs, and finding that sign is a looking job for the weaker eye; if it is missed, the
