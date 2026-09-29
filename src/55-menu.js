@@ -579,9 +579,23 @@ function huntStart(){
   var K = TUNING.kid;
   HUNT = { round:0, c:K.huntStartContrast, best:0, shown:false, blank:false, hold:0, wait:0,
            misses:0, hits:0, fa:0, blanks:0, fb:0, fbGood:false,
-           pos:{x:0.5,y:0.45}, done:false, unreliable:false };
+           pos:{x:0.5,y:0.45}, done:false, unreliable:false, realDone:false };
   huntArm();
   say('hunt');
+}
+/* The real rounds are over (enough catches, the floor reached, or two
+   misses) — but the run only ends once every catch trial has been shown.
+   It used to end on the last real catch, and when the dice had put the
+   blanks late, a masher met only one of them and was waved through. */
+function huntRealOver(){
+  var K = TUNING.kid;
+  HUNT.realDone = true;
+  if(HUNT.blanks >= K.catchTrials) huntFinish();
+  else huntArm();
+}
+function huntNext(){
+  if(HUNT.realDone && HUNT.blanks >= TUNING.kid.catchTrials) huntFinish();
+  else huntArm();
 }
 function huntArm(){
   var K = TUNING.kid;
@@ -591,9 +605,9 @@ function huntArm(){
      a masher "catches" every round and always lands on whatever the last
      scheduled contrast happened to be.
      Exactly K.catchTrials of them are interleaved, spread by weighting
-     against the real rounds still to come, so the run always ends with the
-     full set armed however the dice fall. */
-  var realLeft  = Math.max(0, K.huntRounds - HUNT.round);
+     against the real rounds still to come; any not yet shown when the real
+     rounds end are shown before the run finishes (huntRealOver). */
+  var realLeft  = HUNT.realDone ? 0 : Math.max(0, K.huntRounds - HUNT.round);
   var blankLeft = Math.max(0, K.catchTrials - HUNT.blanks);
   HUNT.blank = blankLeft > 0 && (realLeft === 0 || Math.random() < blankLeft / (blankLeft + realLeft));
   if(HUNT.blank) HUNT.blanks++;
@@ -612,7 +626,7 @@ function huntTick(){
     return;
   }
   if(--HUNT.hold <= 0){
-    if(HUNT.blank){ huntArm(); return; }   /* letting a blank pass is the right answer */
+    if(HUNT.blank){ huntNext(); return; }   /* letting a blank pass is the right answer */
     huntMiss();
   }
 }
@@ -624,18 +638,18 @@ function huntPress(){
   var K = TUNING.kid;
   if(!HUNT || HUNT.done) return;
   if(!HUNT.shown){ huntFalseAlarm(); return; }          /* pressed before anything opened */
-  if(HUNT.blank){ huntFalseAlarm(); huntArm(); return; } /* pressed at nothing */
+  if(HUNT.blank){ huntFalseAlarm(); huntNext(); return; } /* pressed at nothing */
   HUNT.hits++; HUNT.best = HUNT.c;
   HUNT.fb = K.feedbackFrames; HUNT.fbGood = true; sfx('star'); say('good');
   HUNT.round++;
-  if(HUNT.round >= K.huntRounds || HUNT.c <= K.huntFloor + 1e-6){ huntFinish(); return; }
+  if(HUNT.round >= K.huntRounds || HUNT.c <= K.huntFloor + 1e-6){ huntRealOver(); return; }
   HUNT.c = Math.max(K.huntFloor, HUNT.c * K.huntStepFactor);
   huntArm();
 }
 function huntMiss(){
   var K = TUNING.kid;
   HUNT.misses++; HUNT.fb = K.feedbackFrames; HUNT.fbGood = false; sfx('oops');
-  if(HUNT.misses >= K.huntMissesToStop){ huntFinish(); return; }
+  if(HUNT.misses >= K.huntMissesToStop){ huntRealOver(); return; }
   HUNT.c = Math.min(1, HUNT.c / K.huntStepFactor);
   huntArm();
 }

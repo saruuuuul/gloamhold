@@ -51,15 +51,36 @@ async function launch() {
       tried.push(`${channel || 'bundled'}: ${String(e.message).split('\n')[0]}`);
     }
   }
+  /* then any Chromium binary already on the machine: an explicit CHROMIUM_PATH,
+     a browsers directory from an older Playwright, or the distro package */
+  const paths = [process.env.CHROMIUM_PATH,
+    process.env.PLAYWRIGHT_BROWSERS_PATH && join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium'),
+    '/usr/bin/chromium', '/usr/bin/chromium-browser'].filter((p) => p && existsSync(p));
+  for (const executablePath of paths) {
+    try {
+      return { browser: await chromium.launch({ args, executablePath }), via: executablePath };
+    } catch (e) {
+      tried.push(`${executablePath}: ${String(e.message).split('\n')[0]}`);
+    }
+  }
   console.log('skip — no usable Chromium found:\n  ' + tried.join('\n  ') + '\n  fix with: npx playwright install chromium');
   process.exit(0);
 }
 
 const fails = [];
 const { browser, via } = await launch();
-const pg = await browser.newPage({ viewport: { width: 900, height: 440 }, deviceScaleFactor: 2 });
+/* ignoreHTTPSErrors: behind an intercepting proxy the Google Fonts request fails
+   certificate checks and logs a console error that has nothing to do with the app */
+const pg = await browser.newPage({ viewport: { width: 900, height: 440 }, deviceScaleFactor: 2, ignoreHTTPSErrors: true });
 pg.on('pageerror', (e) => fails.push('pageerror: ' + e.message));
-pg.on('console', (m) => { if (m.type() === 'error') fails.push('console: ' + m.text()); });
+pg.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  /* the only remote resource is Google Fonts; offline or behind a proxy it fails
+     to load, and the app falls back to system fonts — not an app error */
+  const url = (m.location() && m.location().url) || '';
+  if (/^Failed to load resource/.test(m.text()) && /^https?:/.test(url)) return;
+  fails.push('console: ' + m.text());
+});
 
 await pg.goto(page_url);
 await pg.waitForTimeout(800);
