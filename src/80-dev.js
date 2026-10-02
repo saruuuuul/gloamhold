@@ -23,12 +23,13 @@ var RANGE_RULES = [
   [/^(stars|unlock|coinsPerStar|sparkleCoins|secretChestCoins|bombDamage|arrowDamage|bossHpPerIsland)/,
                                                           function(v){ return {min:0, max:Math.max(20, Math.ceil(v*3)), step:1}; }],
   [/Scale$/,                                              function(){ return {min:0.1, max:2, step:0.05}; }],
-  [/^(lives|rivals|lanes|wavesPerLevel|segLines|linesBase|linesStep|lockResets|ringShots|summonCount|summonMax|bugsMin|bugsMax|extraFoes|kingHp|saucerHp|crushCoins|flipStars|basePrice|priceStep|smallHp|bombEvery|flipStarsMax|flipDelay|lipGrace|flipSafeFrames)$/,
+  [/^(lives|rivals|lanes|wavesPerLevel|segLines|linesBase|linesStep|lockResets|ringShots|summonCount|summonMax|bugsMin|bugsMax|extraFoes|kingHp|saucerHp|crushCoins|flipStars|basePrice|priceStep|smallHp|bombEvery|flipStarsMax|flipDelay|lipGrace|flipSafeFrames|minRunSec)$/,
                                                           function(v){ return {min:0, max:Math.max(10, Math.ceil(v*3)), step:1}; }],
   [/Vol$/,                                                function(){ return {min:0, max:1, step:0.01}; }],
   [/^(bpmLow|bpmHigh)$/,                                  function(){ return {min:60, max:240, step:2}; }],
   [/^(startAt|lookahead|landTol|kidLandTol|iceGrip|slopePull|flipRate|levelRate|maxTurn|lipKick)$/, function(){ return {min:0, max:3.2, step:0.01}; }],
-  [/^(lenBase|lenStep|stageBase|stageStep)$/,             function(v){ return {min:0, max:Math.ceil(v*3), step:50}; }]
+  [/^(lenBase|lenStep|stageBase|stageStep)$/,             function(v){ return {min:0, max:Math.ceil(v*3), step:50}; }],
+  [/^maxRuns$/,                                           function(){ return {min:50, max:2000, step:50}; }]
 ];
 function rangeFor(path, v){
   var leaf = path.split('.').pop(), i;
@@ -61,6 +62,7 @@ var SECTION_NOTE = {
   blocks:  'Falling blocks. gravity is frames per row; segLines lines make one staircase step.',
   rocks:   'Space Rocks. Speeds are field units per frame.',
   race:    'Top-down racer. Distances are field units.',
+  study:   'Study data kept on the phone: the shortest run worth a row, and how many runs the history keeps.',
   truck:   'Gator Truck. The stick is only the gas; the truck levels itself in the air, and holding A flips it. landTol / kidLandTol are how crooked a landing may be (radians); slopePull under 1 keeps every hill climbable.'
 };
 var devBuilt = false;
@@ -112,13 +114,20 @@ function sessionRecord(){
     /* which game this run was: 'islands', or an arcade game's id */
     activity: S.activity || 'islands',
     settings: { weakEye:cfg.weakEye, mode:cfg.mode, adapt:cfg.adapt, strongContrast:cfg.strong,
+                /* what strongContrast means, and the blend alpha it is drawn at */
+                contrastScale:cfg.contrastScale, strongAlpha:+stimAlpha(cfg.strong).toFixed(3),
+                kidMode:cfg.kidMode, protocol:cfg.protocol || '', locked:!!cfg.locked, sessionMinutes:TUNING.session.minutes,
                 sep:cfg.sep, zoom:cfg.zoom, lens:cfg.lens, k1:cfg.k1, k2:cfg.k2, chroma:cfg.chroma, lensOff:cfg.lensOff },
     outcome: { endedWon:!!S.won, elapsedSec:Math.round(S.elapsed/1000), roomsEntered:S.rooms,
                roomsClean:S.cleanRooms, hits:S.hits, kills:S.kills,
                stepsDown:S.stepsDown, stepsUp:S.stepsUp,
                contrastStart:(S.trail[0]||{}).c, contrastEnd:cfg.strong,
+               /* estimated fraction of full luminance Michelson contrast at the end,
+                  on an ideal sRGB display, mean over the reference colours */
+               contrastEndLumEst:+strongLumContrast().toFixed(3),
                contrastBest:S.trail.reduce(function(a,p){ return Math.min(a,p.c); }, 1),
-               island:ISLAND ? ISLAND.id : null, knockdowns:S.knockdowns||0,
+               /* only the islands have an island: arcade games leave one loaded in the background */
+               island:(S.activity || 'islands') === 'islands' && ISLAND ? ISLAND.id : null, knockdowns:S.knockdowns||0,
                coins:S.coins||0, secrets:S.secrets||0, starsGained:S.starsGained||0,
                firstLight:!!S.firstLight, sittingMin:+(SIT.ms/60000).toFixed(1),
                level:S.level || null, score:S.score || 0, place:S.place || null,
@@ -173,6 +182,8 @@ try{
     screens: function(){ var o=[], k; for(k in SCREENS) o.push(k); return o; },
     open: function(id){ openMenu(id); },
     pick: function(i){ MENU.idx = i; },
+    screenItems: function(){ return menuItems(); },
+    noniusAnswer: noniusAnswer,
     confirm: menuConfirm,
     play: startRun,
     flat: goFlat,
@@ -201,6 +212,15 @@ try{
        otherwise gatherInput() overwrites whatever a test put in input */
     freeze: function(){ running = false; },
     nav: menuNav,
+    history: function(){ return HIST; },
+    archive: archiveRun,
+    runsCsv: runsCsv,
+    segmentsCsv: segmentsCsv,
+    studyExport: studyExport,
+    applyProtocol: applyProtocol,
+    stimAlpha: stimAlpha,
+    lumContrastOf: lumContrastOf,
+    savePending: savePending,
     tp: function(tx, ty, face){ G.p.x = tx*TS + TS/2; G.p.y = ty*TS + TS/2; G.p.vx = G.p.vy = 0; if(face) G.p.face = face; },
     room: function(key){ enterRoom(key, null); },
     grant: function(t){ PROG.tools[t] = true; G.tool = t; },

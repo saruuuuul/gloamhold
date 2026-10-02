@@ -39,7 +39,10 @@ if not html_parts or not js_parts:
 
 head_and_body = "\n".join(read(n) for n in html_parts)
 script        = "\n".join(read(n) for n in js_parts)
-body = (head_and_body + "\n<script>\n(function(){\n\"use strict\";\n"
+NOTICE = ("/*! Gloamhold %s - dichoptic stereo games. Copyright (C) 2026 Saruul.\n"
+          " * Free software: GNU Affero General Public License v3.0 or later (SPDX: AGPL-3.0-or-later).\n"
+          " * Source: https://github.com/saruuuuul/gloamhold - not a medical device. */\n" % VERSION)
+body = (head_and_body + "\n<script>\n" + NOTICE + "(function(){\n\"use strict\";\n"
         + script + "\n})();\n</script>\n")
 body = body.replace("__BUILD__", BUILD)
 
@@ -59,6 +62,26 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 </script>
 """
 
+# Link previews (chat apps, social sites, search). og:image must be an absolute URL.
+# Keep the wording to what the thing is: no claim that it treats or improves anything.
+SITE = "https://saruuuuul.github.io/gloamhold/"
+DESC = ("Five side-by-side stereo games for a phone in a Cardboard viewer, with separate contrast "
+        "for each eye. Free software (AGPL-3.0). A hobby project, not a medical device.")
+META = "\n".join([
+    '<meta name="description" content="%s">' % DESC,
+    '<link rel="canonical" href="%s">' % SITE,
+    '<meta property="og:type" content="website">',
+    '<meta property="og:site_name" content="Gloamhold">',
+    '<meta property="og:title" content="Gloamhold: stereo games with per-eye contrast">',
+    '<meta property="og:description" content="%s">' % DESC,
+    '<meta property="og:url" content="%s">' % SITE,
+    '<meta property="og:image" content="%sog.png">' % SITE,
+    '<meta property="og:image:width" content="1280">',
+    '<meta property="og:image:height" content="640">',
+    '<meta property="og:image:alt" content="Two halves of a space shooter: a rock king faint on the left, full strength on the right">',
+    '<meta name="twitter:card" content="summary_large_image">',
+])
+
 STANDALONE = """<!doctype html>
 <html lang="en">
 <head>
@@ -69,6 +92,7 @@ STANDALONE = """<!doctype html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+{meta}
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -87,7 +111,8 @@ body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display
 
 DIST.mkdir(exist_ok=True)
 (DIST / "index.html").write_text(
-    STANDALONE.replace("{head}", head_src).replace("{rest}", rest).replace("{swreg}", SW_REG),
+    STANDALONE.replace("{meta}", META).replace("{head}", head_src).replace("{rest}", rest)
+              .replace("{swreg}", SW_REG),
     encoding="utf-8")
 (DIST / "artifact-body.html").write_text(body, encoding="utf-8")
 

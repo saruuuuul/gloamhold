@@ -1,6 +1,8 @@
 {
   "name": "gloamhold",
   "private": true,
+  "license": "AGPL-3.0-or-later",
+  "repository": "github:saruuuuul/gloamhold",
   "description": "Dev tooling only. The app itself has no dependencies and ships as one HTML file.",
   "scripts": {
     "build": "python build.py",

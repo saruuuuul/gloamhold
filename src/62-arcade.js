@@ -54,6 +54,7 @@ function arcadeStart(id, level){
 /* leave whatever is running for the game picker, without awarding the run —
    stars are for finishing or for falling, not for quitting */
 function leaveToHub(){
+  if(LIVE) archiveRun('left');
   running = false; S.ended = true; LIVE = false; letSleep();
   closeMenu(); openMenu('title');
 }
@@ -89,13 +90,23 @@ function arcCoin(n){
   n = n || 1;
   ARC.coins += n; S.coins += n; PROG.coins += n; PROG.wallet += n;
   sfx('coin');
-  ARC.pops.push({ kind:'coin', n:n, t:40 });
+  arcPop('coin', n);
+}
+/* one "+n" per kind at a time: coins that arrive together add up into one
+   pop instead of stacking unreadable "+1"s over the counter */
+function arcPop(kind, n){
+  var life = kind === 'star' ? 60 : 40, i;
+  for(i = ARC.pops.length - 1; i >= 0; i--){
+    var pp = ARC.pops[i];
+    if(pp.kind === kind && pp.t > life*0.4){ pp.n += n; pp.t = life; return; }
+  }
+  ARC.pops.push({ kind:kind, n:n, t:life });
 }
 function arcStar(n){
   n = n || 1;
   S.bonusStars = (S.bonusStars || 0) + n;
   sfx('star');
-  ARC.pops.push({ kind:'star', n:n, t:60 });
+  arcPop('star', n);
 }
 function arcBanner(text, col){ ARC.banner = { text:text, col:col || C.gold, t:TUNING.arcade.bannerFrames }; }
 function arcHitstop(n){ ARC.hit = Math.max(ARC.hit, n == null ? TUNING.arcade.hitstopFrames : n); }
@@ -208,7 +219,8 @@ function drawArcadeHUD(eye, vp0){
   }
   for(i=0;i<ARC.pops.length;i++){
     var pp = ARC.pops[i], k = 1 - pp.t/(pp.kind === 'star' ? 60 : 40);
-    mtext('+' + pp.n, vp.x + vp.w - hs*1.4, y + hs*(pp.kind === 'star' ? 1.5 : 0) + hs*0.2 - k*hs*1.2, hs*0.9,
+    /* to the left of the icon, rising a little — never over the number */
+    mtext('+' + pp.n, vp.x + vp.w - hs*5.3, y + hs*(pp.kind === 'star' ? 1.5 : 0) - k*hs*0.5, hs*0.8,
           pp.kind === 'star' ? C.bone : C.gold, 'right', 700, F_MONO);
   }
   if(M && M.hud) M.hud(ARC.g, eye, vp, u);

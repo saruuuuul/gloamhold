@@ -29,10 +29,10 @@ jobs:
           node -e "
           const fs=require('fs');
           const s=fs.readFileSync('dist/index.html','utf8');
-          const i=s.lastIndexOf('<script>\n(function(){');
+          const i=s.lastIndexOf('(function(){\n"use strict";');
           const j=s.indexOf('</script>', i);
           if(i<0||j<0){ console.error('bundle not found'); process.exit(1); }
-          new Function(s.slice(i+8, j));
+          new Function(s.slice(i, j));
           console.log('bundle parses, ' + (j-i) + ' bytes');
           "
       - uses: actions/configure-pages@v5

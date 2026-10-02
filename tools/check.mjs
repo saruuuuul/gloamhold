@@ -88,6 +88,18 @@ for (const n of jsNames) {
 if (/1\.0 \+ k1 \+ k2/.test(core) !== /1\s*\/\s*\(\s*1\s*\+\s*cfg\.k1\s*\+\s*cfg\.k2\s*\)/.test(core))
   fail('shader normalisation and lensZoom() disagree — the picture will silently zoom');
 
+/* 4b — free software, and nobody asks a child for money */
+const lic = join(ROOT, 'LICENSE');
+if (!existsSync(lic) || !/GNU AFFERO GENERAL PUBLIC LICENSE/.test(readFileSync(lic, 'utf8')))
+  fail('LICENSE is missing or is not the AGPL — the README and the bundle say AGPL-3.0-or-later');
+/* every file that draws something a child can land on: the menus, the picker,
+   the sea and the games. Support links live only on the grown-up flat panel. */
+const childFacing = jsNames.filter((n) => /^(5[5-9]|6\d)-/.test(n));
+for (const n of childFacing) {
+  if (/donat|sponsor|ko-?fi|buy ?me ?a ?coffee|patreon|tip jar/i.test(read(n)))
+    fail(`${n}: mentions donations — never ask a child for money; support links belong on the grown-up flat panel only`);
+}
+
 /* 5 — tuning coverage */
 const tuning = read('30-tuning.js');
 const leaves = [...tuning.matchAll(/(\w+)\s*:\s*-?\d+(\.\d+)?/g)].length;
