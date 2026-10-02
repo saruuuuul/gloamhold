@@ -292,7 +292,10 @@ still looks fine, which is the worst kind of bug here.
 - **The deploy workflow parses the bundle** by finding `(function(){\n"use strict";` in
   `dist/index.html`. `build.py` now puts the AGPL notice comment before that wrapper; if the
   wrapper's first line ever changes, change `.github/workflows/deploy.yml` with it or every
-  deploy fails at "Check the bundle parses".
+  deploy fails at "Check the bundle parses". That step feeds node a quoted heredoc
+  (`node <<'JS'`) because the marker contains double quotes: inside `node -e "..."` they ended
+  the shell string and the first open-source deploy failed. Test a change to it by running the
+  step through `bash`, not just its JavaScript.
 - **Study data is the first thing a researcher checks.** If a field changes meaning, change
   `RESEARCH.md`'s data dictionary in the same commit, and bump the export `version`.
 
