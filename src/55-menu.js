@@ -401,6 +401,7 @@ SCREENS.safety = {
     y += u*3;
     mparagraph('Cardboard-style viewers are built for an adult eye spacing. On a small child the lens centres may not sit over the pupils, which adds strain and works against fusion. Measure before you rely on this.',
       vp.x + u*4, y, vp.w - u*8, u*3.7, '#8e8a7e', 1.5);
+    mtext('Free software (GNU AGPL v3+) · source: github.com/saruuuuul/gloamhold', vp.x + vp.w/2, vp.y + vp.h - u*12.5, u*2.8, '#5a6076', 'center', 400, F_MONO);
     mtext('Built with generative AI (Claude). ' + BUILD, vp.x + vp.w/2, vp.y + vp.h - u*9, u*2.8, '#5a6076', 'center', 400, F_MONO);
     drawMenuFoot({ hint:'B back' }, vp, u);
   },

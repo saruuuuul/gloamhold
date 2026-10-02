@@ -1,0 +1,7 @@
+# Shows the "Sponsor" button on the repository page.
+# GitHub Sponsors only works once the account is approved at https://github.com/sponsors
+github: [saruuuuul]
+# Uncomment and fill in once the accounts exist (and add the same links to
+# SUPPORT in src/84-support.js so the in-app grown-up page shows them too):
+# ko_fi: yourname
+# buy_me_a_coffee: yourname

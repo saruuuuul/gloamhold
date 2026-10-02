@@ -39,7 +39,10 @@ if not html_parts or not js_parts:
 
 head_and_body = "\n".join(read(n) for n in html_parts)
 script        = "\n".join(read(n) for n in js_parts)
-body = (head_and_body + "\n<script>\n(function(){\n\"use strict\";\n"
+NOTICE = ("/*! Gloamhold %s - dichoptic stereo games. Copyright (C) 2026 Saruul.\n"
+          " * Free software: GNU Affero General Public License v3.0 or later (SPDX: AGPL-3.0-or-later).\n"
+          " * Source: https://github.com/saruuuuul/gloamhold - not a medical device. */\n" % VERSION)
+body = (head_and_body + "\n<script>\n" + NOTICE + "(function(){\n\"use strict\";\n"
         + script + "\n})();\n</script>\n")
 body = body.replace("__BUILD__", BUILD)
 

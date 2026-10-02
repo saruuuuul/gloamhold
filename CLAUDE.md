@@ -20,6 +20,7 @@ python3 build.py          # src/ + public/ -> dist/   (the only build step)
 node tools/check.mjs      # zero-dependency invariant + wiring checks — run after every edit
 npm install               # once: dev tooling only (playwright); the app itself has no deps
 node tests/smoke.mjs      # headless playthrough — or `npm run verify` for all three
+node tools/contrast-table.mjs   # alpha -> luminance contrast per background (paste into RESEARCH.md if colours change)
                           # (no matching Playwright browser? it falls back to CHROMIUM_PATH,
                           #  $PLAYWRIGHT_BROWSERS_PATH/chromium or /usr/bin/chromium)
 python3 -m http.server 8000 --directory dist   # serve for a phone on the same wifi
@@ -55,11 +56,16 @@ Consequences that are easy to violate:
 These are not style preferences. Breaking one makes the training claim false while the game
 still looks fine, which is the worst kind of bug here.
 
-1. **Alpha *is* contrast.** Every foreground sprite is drawn on top of the floor fill, so
-   compositing at alpha *a* gives `L = a·L_obj + (1−a)·L_floor` — its Michelson contrast
-   against the floor is scaled by exactly *a*. The "contrast %" in the UI is that *a*.
-   Never draw a signal sprite onto bare canvas, never use `globalCompositeOperation`,
-   shadows, or gradients on signal layers, and never fake dimness by picking a darker colour.
+1. **Alpha *is* the stimulus — and it is not luminance contrast.** Every foreground sprite is
+   drawn over a uniform floor fill at alpha *a*, so its *encoded* sRGB difference from the floor
+   is scaled by exactly *a*. The browser blends gamma-encoded values, so its LUMINANCE Michelson
+   contrast is not: *a* = 0.40 keeps about 75% of it on the dungeon floor
+   (`node tools/contrast-table.mjs`). `cfg.contrastScale` says which one `cfg.strong` names
+   (`alpha`, the default, or `luminance`, an sRGB-model estimate), and every path that turns
+   `cfg.strong` into an alpha goes through `stimAlpha()`. Never write that *a* "is" the contrast
+   in copy or docs. Never draw a signal sprite onto bare canvas, never use
+   `globalCompositeOperation`, shadows, or gradients on signal layers, and never fake dimness by
+   picking a darker colour.
 2. **`alphaFor(eye, layer)` in `20-core.js` is the only place eye visibility is decided.**
    Anything new that gets drawn must pick a layer: `world`, `player`, `foe`, `item`, `clue`,
    `hud`. Do not branch on `cfg.weakEye` anywhere else. Arcade games draw per-eye content
@@ -128,10 +134,19 @@ still looks fine, which is the worst kind of bug here.
    | Game | `world` / `player` (both, full) | `foe` | `item` | `clue` |
    |---|---|---|---|---|
    | Gator Truck | sky, ground, water, tunnel rock, flags; the truck | junk cars, boulders, pufferfish | coins, stars, pearls | gate signs, ramp arrows, balloons |
-   | Blocks | the well, the lines-to-go bar | falling piece, next piece, bomb blast | settled stack, gems, clear sparks | ghost piece |
+   | Jelly Blocks | the jar, the lines-to-go bar | falling jelly, next jelly, bomb blast | settled stack, gems, clear sparks | dotted landing guide |
    | Space Rocks | field, frame; the ship, its shots, its shield | rocks, comets, rock king (+ its health bar), saucer and its shots, debris | power-ups | — |
    | Racer | road, verges, lanes, flags, scenery; his car | rivals, oil, ice (+ rival marks on the progress bar) | coins, nitro | ramps, boost pads |
 
+13. **Clues change shape, never alpha.** A sparkle twinkles by growing its arms and a coin
+   glints by narrowing; neither ever modulates `globalAlpha`, because alpha IS the contrast
+   and an oscillating alpha would make "contrast %" a peak rather than a value. The owl's hint
+   follows the same rule: it turns to look and speaks — it never puts a glow on the clue.
+14. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
+   Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
+   `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name', arg)`,
+   which is a no-op until `audioUnlock()` has run on a real gesture. The carol in
+   `36-music.js` is built the same way, scheduled a little ahead on the audio clock.
 15. **Rewards never appear where a per-eye thing died.** A coin dropped where a rock broke or
    a foe fell is an item-layer sprite marking exactly where a foe-layer object was — in forced
    fusion, that shows the stronger eye what it is not allowed to see. So coins from foes go
@@ -143,15 +158,17 @@ still looks fine, which is the worst kind of bug here.
    frames, `arcHitstop`), squash and local particles instead. No full-screen flashes and nothing
    large flickering fast (photosensitivity). The truck's camera cuts to a respawn rather than
    sweeping back across the course.
-13. **Clues change shape, never alpha.** A sparkle twinkles by growing its arms and a coin
-   glints by narrowing; neither ever modulates `globalAlpha`, because alpha IS the contrast
-   and an oscillating alpha would make "contrast %" a peak rather than a value. The owl's hint
-   follows the same rule: it turns to look and speaks — it never puts a glow on the clue.
-14. **Sound is synthesised, never loaded.** No `<audio>`, no fetch, no base64 blobs. The
-   Artifact CSP blocks external requests and the build is one file. Add an entry to `SFX` in
-   `src/35-audio.js` built from `tone()` / `hiss()`, and call it through `sfx('name', arg)`,
-   which is a no-op until `audioUnlock()` has run on a real gesture. The carol in
-   `36-music.js` is built the same way, scheduled a little ahead on the audio clock.
+17. **Never ask a child for money.** Gloamhold is free software funded by donations, and the
+   support links live only on the grown-up flat panel (`src/84-support.js`) and the README.
+   No donation prompt, reminder or "supporter" reward on any stereo screen or in any game, and
+   donations never unlock anything. `tools/check.mjs` fails a child-facing file (`55-`–`69-`)
+   that mentions donating, sponsoring or tipping.
+18. **A locked protocol is locked.** Under `cfg.locked` nothing may change a setting the
+   protocol fixes — the weaker eye, `cfg.strong`, `cfg.contrastScale`, mode, staircase, child
+   mode, session length. The staircase still runs if the protocol turned it on; the easy setup and
+   the nonius answers record but do not adjust. A new setting that changes what either eye sees
+   must be added to the lock (`PROTOCOL_CFG` and `LOCKED_CONTROLS` in `82-study.js`, `study:true`
+   on its row in `SCREENS.adult`) and to the session record.
 
 ## File map
 
@@ -176,6 +193,10 @@ still looks fine, which is the worst kind of bug here.
 | `src/62-arcade.js` | The arcade runtime: `ARC`, `arcadeStart`/`arcadeFrame`/`arcadeEnd`, segments (`arcSegStart`/`Fail`/`End`), `arcCoin`/`arcStar`, `arcLevelDone`, `withLayer`, particles, the arcade HUD, `SCREENS.arcadeDone` |
 | `src/63-truck.js` … `66-race.js` | Gator Truck, Blocks, Space Rocks, Racer — each registers itself in `GAMES` |
 | `src/70-ui.js` | Flow control (`startRun`/`resumeRun`/`playOn`/`menuStart`/`doPause`, `LIVE`), the sitting clock `SIT`, exposure telemetry, flat panel wiring, game loop (dispatches to `arcadeFrame`), `uiLoop`, boot |
+| `src/82-study.js` | Study data: run history in `gloamhold.history`, `archiveRun`, crash recovery (`savePending`/`recoverPending`), CSV/JSON export, participant code, protocol load (`applyProtocol`) and lock |
+| `src/84-support.js` | `SUPPORT` links (source, GitHub Sponsors, Ko-fi, Buy Me a Coffee) for the grown-up flat panel |
+| `tools/contrast-table.mjs` | Prints what each alpha leaves in luminance contrast per game background, from `20-core.js`'s own functions |
+| `RESEARCH.md`, `CONTRIBUTING.md`, `LICENSE` | Evaluation guide and data dictionary; contributor rules (incl. relicensing grant); AGPL-3.0 text |
 | `src/80-dev.js` | Auto-generated tuning panel, session telemetry (incl. `activity`), `window.GH` handle (incl. `step`/`freeze`/`tp`/`room`/`islandCheck`, and `arcade`/`astep`/`busy`/`arcadeEnd` for the arcade games) |
 | `public/` | manifest, service worker, icons — copied to `dist/` with `__BUILD__` substituted |
 
@@ -267,6 +288,13 @@ still looks fine, which is the worst kind of bug here.
   weaker eye anything to do. Read it that way, and never present it as more.
 
 ## Gotchas already paid for
+
+- **The deploy workflow parses the bundle** by finding `(function(){\n"use strict";` in
+  `dist/index.html`. `build.py` now puts the AGPL notice comment before that wrapper; if the
+  wrapper's first line ever changes, change `.github/workflows/deploy.yml` with it or every
+  deploy fails at "Check the bundle parses".
+- **Study data is the first thing a researcher checks.** If a field changes meaning, change
+  `RESEARCH.md`'s data dictionary in the same commit, and bump the export `version`.
 
 - **"Flat menus" used to be a trap.** It persisted `cfg.flat`, every launch then opened the
   big HTML page, and nothing on that page led back. Now boot always clears `cfg.flat`, both

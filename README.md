@@ -14,6 +14,28 @@ viewer, and each game is arranged so that neither eye can finish it alone.
 
 ---
 
+## Free software
+
+Gloamhold is free software under the **GNU Affero General Public License v3.0 or later**
+([`LICENSE`](LICENSE)): use it, study it, change it and share it. If you run a modified version
+for other people over a network, the AGPL asks you to offer them your source too. It is free to
+play for everyone at <https://saruuuuul.github.io/gloamhold/> — no ads, no accounts, no data
+leaving the phone.
+
+- **Clinicians and researchers:** [`RESEARCH.md`](RESEARCH.md) says exactly what is shown to each
+  eye, what "contrast" means here (and what it does not), how to run it under a locked protocol,
+  and every field in the data it exports.
+- **Contributors:** [`CONTRIBUTING.md`](CONTRIBUTING.md) — build, test, and the rules that keep it
+  honest and safe for children.
+
+### Supporting it
+
+If it helps your family or your work, you can support the time that goes into it through
+**[GitHub Sponsors](https://github.com/sponsors/saruuuuul)** (the *Sponsor* button on the
+repository). Donations buy nothing in the game and unlock nothing: every game, colour and island
+is free for everyone, and nothing in the app ever asks a child for money — the support links are
+only on the grown-up flat panel.
+
 ## Why the architecture looks like this
 
 The bottleneck in improving this thing is not compile time. It is that **your face is inside
@@ -37,7 +59,7 @@ src/                 concatenated in filename order — 20 runs before 40
   10-panels.html     flat fallback panels + the generated tuning panel
   20-core.js         config, canvas, WebGL lens stage, dungeon tables
   25-islands.js      the sea: island definitions, seeded generator, validator
-  30-tuning.js       TUNING: every balance / therapy / audio / optics number
+  30-tuning.js       TUNING: every balance / therapy / audio / optics / study number
   35-audio.js        synthesised sound effects and spoken prompts — no assets, no fetches
   36-music.js        Carol of the Bells, synthesised, for the intense moments
   40-entities.js     update loop, enemies, wardens, damage, the adaptive staircase
@@ -56,6 +78,10 @@ src/                 concatenated in filename order — 20 runs before 40
   66-race.js         Racer
   70-ui.js           flow control, wake lock, game loop, boot
   80-dev.js          auto-generated tuning panel, session telemetry, GH console handle
+  82-study.js        study data: run history, CSV/JSON export, participant code, protocol lock
+  84-support.js      source and support links (grown-up flat panel only)
+tools/check.mjs      invariant and wiring checks
+tools/contrast-table.mjs   what each "contrast" setting leaves in luminance, per game background
 public/              manifest, service worker, icons — copied to dist verbatim
 build.py             concatenate → dist/index.html + dist/artifact-body.html
 ```
@@ -201,10 +227,12 @@ form it needs, and finding that sign is a looking job for the weaker eye; if it 
 gator says so, and in child mode it changes by itself after the hint. Big jumps and flips pay
 stars. Courses rotate meadow, desert, snow, forest, lake and the moon's low gravity.
 
-**Blocks** — falling blocks. ‹ › move, up or A rotates, down drops faster, B drops at once.
-Gems ride in some pieces and pay a star when their row clears; an occasional bomb blasts a hole;
-clears in a row climb in pitch; four at once is a BIG CLEAR. In child mode reaching the top
-sweeps the lower half away instead of ending the game.
+**Jelly Blocks** — round jellies falling into a jar. ‹ › move, up or A rotates, down drops
+faster, B drops at once; a dotted guide shows where the jelly will land. Pieces are two or three
+jellies, not four. Gems ride in some jellies and pay a star when their row clears; an occasional
+bomb blasts a hole; clears in a row climb in pitch; three at once is a BIG CLEAR. In child mode
+reaching the top sweeps the lower half away instead of ending the game. (It was a closer copy of
+Tetris, whose look a US court has held protectable; it was redesigned before the source opened.)
 
 **Space Rocks** — a little ship among rocks in a field that wraps round. The stick flies the
 ship where it points (no rotate-and-thrust), A held fires, a right stick aims if the pad has
@@ -316,9 +344,11 @@ a new field, add a pattern to `RANGE_RULES` in `80-dev.js`.
 
 ## The dichoptic bits, briefly
 
-- Everything is drawn on top of the floor fill, so compositing a sprite at alpha *a* scales
-  its Michelson contrast against the floor by exactly *a*. The "contrast %" in the UI is
-  that *a*, not a guess.
+- Everything is drawn on top of a uniform floor fill at a blend alpha *a*, and the "contrast %"
+  in the UI is that *a*. It is **not** the luminance contrast: the browser blends gamma-encoded
+  values, so *a* = 0.40 leaves about 75% of a sprite's full luminance contrast on the dungeon
+  floor. An opt-in *luminance* scale corrects for that on an ideal sRGB display; every run records
+  both numbers. [`RESEARCH.md`](RESEARCH.md) has the table, and why neither is a measurement.
 - Walls, floor and the player go to **both** eyes at full contrast — that is the fusion
   lock, along with the corner brackets in each view.
 - **Contrast rebalance** mode: both eyes see everything, stronger eye fainter.
@@ -334,4 +364,4 @@ a new field, add a pattern to `RANGE_RULES` in `80-dev.js`.
   cancelled by rendering the scene at `1/(1+k₁+k₂)` — standard overfill — and the
   surrounding rock is drawn into the margin so the corners are not black.
 
-Built with generative AI (Claude). Personal / internal use.
+Built with generative AI (Claude). Free software (AGPL-3.0-or-later). Classification: public.

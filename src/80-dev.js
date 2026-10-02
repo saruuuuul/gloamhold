@@ -126,7 +126,8 @@ function sessionRecord(){
                   on an ideal sRGB display, mean over the reference colours */
                contrastEndLumEst:+strongLumContrast().toFixed(3),
                contrastBest:S.trail.reduce(function(a,p){ return Math.min(a,p.c); }, 1),
-               island:ISLAND ? ISLAND.id : null, knockdowns:S.knockdowns||0,
+               /* only the islands have an island: arcade games leave one loaded in the background */
+               island:(S.activity || 'islands') === 'islands' && ISLAND ? ISLAND.id : null, knockdowns:S.knockdowns||0,
                coins:S.coins||0, secrets:S.secrets||0, starsGained:S.starsGained||0,
                firstLight:!!S.firstLight, sittingMin:+(SIT.ms/60000).toFixed(1),
                level:S.level || null, score:S.score || 0, place:S.place || null,
