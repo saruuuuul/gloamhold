@@ -115,6 +115,47 @@
     </div>
   </div>
 
+  <div class="group" id="studyGroup">
+    <h2>Study data</h2>
+    <p class="hint">For a clinic or research group evaluating this. Every run is kept on this phone only &mdash; no account, no network, no names. It is game telemetry (contrast over time, segments, hits, alignment answers, per-eye exposure), not a measurement of vision. RESEARCH.md describes every field.</p>
+    <div class="row">
+      <label class="lbl" for="participantIn">Participant code <span class="val" id="studyCount"></span></label>
+      <input type="text" id="participantIn" maxlength="32" autocomplete="off" spellcheck="false">
+      <p class="hint">Random unless the study team sets one. Letters, digits and - _ . only &mdash; never a name.</p>
+    </div>
+    <div class="row">
+      <span class="lbl">Contrast means</span>
+      <div class="seg" id="segScale">
+        <button data-v="alpha" aria-pressed="true">Blend alpha</button>
+        <button data-v="luminance" aria-pressed="false">Luminance (sRGB estimate)</button>
+      </div>
+      <p class="hint">The screen blends in gamma-encoded values, so a blend alpha of 40% leaves the stronger eye roughly 67&ndash;87% of the full luminance contrast. <em>Luminance</em> makes the setting mean the estimated luminance fraction instead. Both are recorded with every run; neither is a photometric measurement.</p>
+    </div>
+    <div class="row">
+      <label class="lbl" for="protocolIn">Protocol id</label>
+      <input type="text" id="protocolIn" maxlength="32" autocomplete="off" spellcheck="false">
+      <textarea id="protocolJson" spellcheck="false" placeholder='{"protocol":{"id":"STUDY-01","lock":true,"cfg":{"weakEye":"right","strong":0.6},"tuning":{"session":{"minutes":15}}}}'></textarea>
+      <div class="actions">
+        <button class="btn ghost" id="btnLoadProtocol">Load protocol</button>
+        <button class="btn ghost" id="btnLock">Lock settings to this protocol</button>
+      </div>
+      <div class="actions" id="unlockRow" hidden>
+        <input type="text" id="unlockIn" placeholder="protocol id" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="btnUnlock">Unlock</button>
+      </div>
+      <p class="hint" id="lockNote"></p>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnCopyRuns">Copy runs (CSV)</button>
+      <button class="btn ghost" id="btnCopySegs">Copy segments (CSV)</button>
+      <button class="btn ghost" id="btnCopyHist">Copy everything (JSON)</button>
+      <button class="btn ghost" id="btnSaveHist">Save everything as a file</button>
+      <button class="btn ghost" id="btnClearHist">Delete history</button>
+    </div>
+    <p class="hint" id="studyNote"></p>
+    <textarea id="studyOut" spellcheck="false" hidden></textarea>
+  </div>
+
   <div class="note">
     <strong>Not a medical device.</strong> This is a hobby build, not a treatment. Dichoptic training for amblyopia is an active research area with mixed results and it belongs under the supervision of an optometrist or ophthalmologist who has actually measured your acuity, stereoacuity and suppression. Stop immediately and stop using it if you get headache, nausea, eye strain or double vision that persists after you take the viewer off. Children in particular should only do this on a clinician's instruction, since the alternative treatments they might be skipping have real evidence behind them.
   </div>

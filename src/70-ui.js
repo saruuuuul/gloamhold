@@ -22,7 +22,7 @@ function seg(id, get, set){
     });
   };
 }
-function paintSeg(){ ['segEye','segAdapt','segMode','segLens'].forEach(function(id){ var b=el(id); if(b._paint) b._paint(); }); }
+function paintSeg(){ ['segEye','segAdapt','segMode','segLens','segScale'].forEach(function(id){ var b=el(id); if(b._paint) b._paint(); }); }
 seg('segEye',  function(){return cfg.weakEye;}, function(v){ cfg.weakEye=v; });
 seg('segAdapt',function(){return cfg.adapt?'1':'0';}, function(v){ cfg.adapt = v==='1'; });
 seg('segMode', function(){return cfg.mode;},   function(v){ cfg.mode=v; });
@@ -124,7 +124,7 @@ el('btnCheckShow').onclick = function(){ audioUnlock(); hideAll(); nonius.on = t
 el('btnEnter').onclick  = function(){ startRun(); };
 el('btnResume').onclick = function(){ audioUnlock(); keepAwake(); hideAll(); running = true; last = performance.now(); requestAnimationFrame(loop); };
 el('btnRecheck').onclick= function(){ running=false; show('pCheck'); el('checkResult').hidden = true; };
-el('btnQuit').onclick   = function(){ running=false; S.ended=true; LIVE=false; letSleep(); show('pTitle'); drawPreview(); };
+el('btnQuit').onclick   = function(){ archiveRun('quit'); running=false; S.ended=true; LIVE=false; letSleep(); show('pTitle'); drawPreview(); };
 /* the way back from the flat panels to the viewer — there used to be none, so
    one tap on "Flat menus" stranded every later launch on this page */
 el('btnStereo').onclick = function(){ leaveFlat(); };
@@ -268,6 +268,7 @@ function resumeRun(){
   requestAnimationFrame(loop);
 }
 function endSession(){
+  if(LIVE) archiveRun('quit');
   running = false; S.ended = true; LIVE = false; letSleep();
   closeMenu(); openMenu('title'); drawPreview();
 }

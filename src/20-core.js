@@ -16,7 +16,10 @@ var WW = RW*TS, WH = RH*TS;
 var cfg = { weakEye:'right', strong:0.40, mode:'rebalance', adapt:true, sep:0, zoom:1.0, tilt:false,
             lens:'off', k1:0.22, k2:0.10, chroma:0.003, lensOff:0, grid:false,
             mute:false, flat:false, kidSet:false,
-            kidMode:true, speakLang:'mn', allIslands:false, music:true };
+            kidMode:true, speakLang:'mn', allIslands:false, music:true,
+            /* study use: what "contrast" means (see stimAlpha), who is playing
+               under which protocol, and whether the protocol is locked */
+            contrastScale:'alpha', participant:'', protocol:'', locked:false };
 try{ var raw = localStorage.getItem('gloamhold.cfg'); if(raw){ var o=JSON.parse(raw); for(var k in cfg) if(k in o) cfg[k]=o[k]; } }catch(e){}
 function saveCfg(){ try{ localStorage.setItem('gloamhold.cfg', JSON.stringify(cfg)); }catch(e){} }
 
@@ -131,12 +134,58 @@ function viewportFor(eye){
   var half = VW/2;
   return { x: eye==='left'?0:half, y:0, w:half, h:VH };
 }
+/* ---------------- what "contrast" means ----------------
+   The canvas blends in gamma-ENCODED sRGB values, so drawing at alpha a scales
+   the encoded difference from the floor by exactly a — but not the LUMINANCE
+   difference, which is what an eye responds to. Over the dungeon floor a
+   sprite drawn at alpha 0.40 keeps roughly 67-87% of its full luminance
+   Michelson contrast, and at 0.10 about 21-43%, depending on its colour.
+
+   cfg.contrastScale picks which one cfg.strong names:
+     'alpha'      (default) cfg.strong is the blend alpha, as it always was
+     'luminance'  cfg.strong is the fraction of full luminance Michelson
+                  contrast, averaged over the reference sprite colours below,
+                  on an ideal sRGB display; stimAlpha() finds the alpha for it
+   Either way the session record carries both numbers. Neither is a
+   photometric measurement — real phones are not ideal sRGB displays. */
+var CONTRAST_FLOOR = '#191e29';
+var CONTRAST_REF = ['#5d9257', '#8f6bd6', '#cf4a3e', '#e8b13f', '#ece6d8', '#7a6c48', '#5aa8e8'];
+var LUM_TABLE = null;
+function srgbLin(v){ v /= 255; return v <= 0.04045 ? v/12.92 : Math.pow((v + 0.055)/1.055, 2.4); }
+function hexRgb(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function lumOf(rgb){ return 0.2126*srgbLin(rgb[0]) + 0.7152*srgbLin(rgb[1]) + 0.0722*srgbLin(rgb[2]); }
+/* the fraction of full luminance contrast one colour keeps at alpha a over a floor */
+function lumRatio(a, objHex, floorHex){
+  var o = hexRgb(objHex), f = hexRgb(floorHex || CONTRAST_FLOOR), lf = lumOf(f);
+  var mix = [a*o[0] + (1-a)*f[0], a*o[1] + (1-a)*f[1], a*o[2] + (1-a)*f[2]];
+  var full = Math.abs(lumOf(o) - lf)/(lumOf(o) + lf), now = Math.abs(lumOf(mix) - lf)/(lumOf(mix) + lf);
+  return full > 0 ? now/full : 0;
+}
+/* the reference colours at alpha a: mean, min and max of that fraction */
+function lumContrastOf(a){
+  var sum = 0, lo = 1, hi = 0, i, r;
+  for(i=0; i<CONTRAST_REF.length; i++){ r = lumRatio(a, CONTRAST_REF[i]); sum += r; lo = Math.min(lo, r); hi = Math.max(hi, r); }
+  return { mean:sum/CONTRAST_REF.length, min:lo, max:hi };
+}
+/* the alpha to draw at for a stronger-eye contrast c, in whichever scale is chosen */
+function stimAlpha(c){
+  if(cfg.contrastScale !== 'luminance') return c;
+  if(c <= 0) return 0;
+  if(c >= 1) return 1;
+  if(!LUM_TABLE){ LUM_TABLE = []; for(var i=0; i<=1000; i++) LUM_TABLE.push(lumContrastOf(i/1000).mean); }
+  var lo = 0, hi = 1000;
+  while(hi - lo > 1){ var mid = (lo + hi) >> 1; if(LUM_TABLE[mid] < c) lo = mid; else hi = mid; }
+  return hi/1000;
+}
+/* the estimated luminance-contrast fraction the stronger eye is actually getting */
+function strongLumContrast(){ return cfg.contrastScale === 'luminance' ? cfg.strong : lumContrastOf(cfg.strong).mean; }
+
 function alphaFor(eye, layer){
-  var weak = (eye===cfg.weakEye), s = cfg.strong;
+  var weak = (eye===cfg.weakEye), s = stimAlpha(cfg.strong);
   if(layer==='world' || layer==='player' || layer==='hud') return 1;
   if(cfg.mode==='split'){
     if(layer==='foe')  return weak?1:0;
-    if(layer==='item') return weak?0:Math.max(s, TUNING.therapy.splitItemFloor);
+    if(layer==='item') return weak?0:stimAlpha(Math.max(cfg.strong, TUNING.therapy.splitItemFloor));
     /* clues — plates, sparkles, cracks, eye switches — are the things worth
        finding, so in forced fusion they belong to the eye doing the work */
     if(layer==='clue') return weak?1:0;
@@ -250,6 +299,7 @@ function newGame(islandId){
    of them. In an arcade game a "room" is a segment: a level part, a wave, a
    checkpoint section. */
 function resetRunStats(activity){
+  studyBeforeReset();
   S.started = performance.now(); S.elapsed=0; S.rooms=0; S.cleanRooms=0; S.hits=0; S.kills=0;
   S.trail=[]; S.checks=[]; S.roomLog=[]; S.stepsDown=0; S.stepsUp=0; S.ended=false; S.won=false;
   S.knockdowns=0; S.sessionDone=false; S.starsGained=0; S.warned=false; S.awarded=false;

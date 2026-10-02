@@ -447,14 +447,16 @@ const mech2 = await pg.evaluate(() => {
 
   /* Blocks: a completed row clears, and its gem pays a star */
   let g = start('blocks', 1);
-  for (let x = 1; x < 10; x++) g.grid[19][x] = { c:'#e0645a', hi:'#f2aaa2', gem: x === 5 };
-  g.cur = { type:'I', rot:1, x:-2, y:0, gem:-1 };
+  const rowsN = g.grid.length, colsN = g.grid[0].length;
+  for (let x = 1; x < colsN; x++) g.grid[rowsN - 1][x] = { c:'#e0645a', hi:'#f2aaa2', gem: x === 3 };
+  /* a vertical three-jelly piece dropped into column 0 completes the bottom row */
+  g.cur = { type:'I3', rot:1, x:-1, y:0, gem:-1, col:0 };
   GH.input.toolPress = true; GH.astep(1); GH.astep(GH.TUNING.blocks.clearFrames + 3);
   out.blocksLines = g.lines; out.blocksGem = GH.session.bonusStars;
   /* ... and topping out in child mode sweeps instead of ending, stepping up at most the cap */
   g = start('blocks', 1);
   for (let k = 0; k < 3; k++){
-    for (let y = 0; y < 20; y++) for (let x = 0; x < 10; x++) if (x !== 4) g.grid[y][x] = { c:'#5a7de8', hi:'#a9bcf6', gem:false };
+    for (let y = 0; y < g.grid.length; y++) for (let x = 0; x < g.grid[0].length; x++) if (x !== 3) g.grid[y][x] = { c:'#5a7de8', hi:'#a9bcf6', gem:false };
     g.cur = null; GH.astep(1); GH.astep(50);
   }
   out.blocksTopouts = g.topouts; out.blocksOver = GH.arc.over; out.blocksUps = GH.session.stepsUp;
@@ -685,6 +687,89 @@ if (relaunch.flat || relaunch.panel || (relaunch.menu !== 'tapStart' && relaunch
 await pg.mouse.click(450, 220);
 await pg.waitForTimeout(200);
 
+/* ---------------- study data ----------------
+   what "contrast" means, the run history and its exports, recovery of a run
+   cut short by closing the app, and a locked protocol */
+const study = await pg.evaluate(() => {
+  const out = {};
+  const keep = { scale: GH.cfg.contrastScale, strong: GH.cfg.strong };
+  /* the default scale is the blend alpha, which is NOT the luminance fraction */
+  out.lum40 = GH.lumContrastOf(0.4).mean;
+  GH.cfg.contrastScale = 'luminance';
+  out.alphaFor40 = GH.stimAlpha(0.4);
+  out.roundTrip = GH.lumContrastOf(GH.stimAlpha(0.4)).mean;
+  GH.cfg.strong = 0.4;
+  const strongEye = GH.cfg.weakEye === 'left' ? 'right' : 'left';
+  out.alphaForUses = Math.abs(GH.alphaFor(strongEye, 'foe') - GH.stimAlpha(0.4)) < 1e-9;
+  GH.cfg.contrastScale = keep.scale; GH.cfg.strong = keep.strong;
+
+  /* a run that is left from the pause screen is kept, with its export columns */
+  const before = GH.history().runs.length;
+  GH.cfg.kidMode = true; GH.arcade('rocks', 1); GH.freeze();
+  GH.astep(120); GH.session.elapsed = (GH.TUNING.study.minRunSec + 5) * 1000;
+  GH.open('pause'); GH.pick(1); GH.confirm();
+  const runs = GH.history().runs, last = runs[runs.length - 1];
+  out.added = runs.length - before;
+  out.last = last ? { end: last.end, activity: last.activity, participant: last.participant, hasScale: 'contrastScale' in last.settings,
+                      lum: last.outcome.contrastEndLumEst, tuning: !!GH.history().tunings[last.tuningId], noTuningCopy: !('tuning' in last) } : null;
+  const csv = GH.runsCsv().trim().split('\n');
+  out.csvHeader = csv[0].split(',').length; out.csvRow = csv[csv.length - 1].split(',').length; out.csvRows = csv.length - 1;
+  out.segRows = GH.segmentsCsv().trim().split('\n').length - 1;
+  out.exportRuns = GH.studyExport().runs.length;
+  /* a run too short to matter is not kept */
+  GH.arcade('blocks', 1); GH.freeze(); GH.session.elapsed = 1000;
+  GH.open('pause'); GH.pick(1); GH.confirm();
+  out.shortSkipped = GH.history().runs.length === runs.length;
+
+  /* a locked protocol: settings fixed, nonius answers recorded but not acted on */
+  let bad = '';
+  try { GH.applyProtocol({ id:'X', cfg:{ mute:true } }); } catch (e) { bad = e.message; }
+  out.rejectsOther = /cannot be set/.test(bad);
+  GH.applyProtocol({ id:'SMOKE-1', lock:true, cfg:{ strong:0.6, mode:'rebalance', contrastScale:'alpha' }, tuning:{ session:{ minutes:0 } } });
+  out.locked = GH.cfg.locked && GH.cfg.protocol === 'SMOKE-1' && Math.abs(GH.cfg.strong - 0.6) < 1e-9;
+  GH.open('adult');
+  const items = GH.screenItems();
+  out.contrastRow = (items.find((it) => /^Stronger-eye contrast/.test(it.label)) || {}).k;
+  out.easyHidden = !items.some((it) => /^Easy setup/.test(it.label));
+  out.flatDisabled = document.getElementById('rngStrong').disabled && document.querySelector('#segMode button').disabled;
+  GH.noniusAnswer(3);
+  out.noniusKept = Math.abs(GH.cfg.strong - 0.6) < 1e-9;
+  document.getElementById('unlockIn').value = 'wrong'; document.getElementById('btnUnlock').click();
+  out.wrongStays = GH.cfg.locked;
+  document.getElementById('unlockIn').value = 'SMOKE-1'; document.getElementById('btnUnlock').click();
+  out.unlocked = !GH.cfg.locked && !document.getElementById('rngStrong').disabled;
+  GH.cfg.protocol = ''; GH.cfg.strong = keep.strong;
+
+  /* a run in progress when the app is closed is parked, to be filed on next launch */
+  GH.arcade('race', 1); GH.freeze(); GH.session.elapsed = (GH.TUNING.study.minRunSec + 5) * 1000;
+  out.pendingRunId = GH.session.runId;
+  GH.savePending();
+  out.runsBeforeReload = GH.history().runs.length;
+  return out;
+});
+await pg.reload();
+await pg.waitForTimeout(700);
+const recovered = await pg.evaluate((id) => {
+  const runs = GH.history().runs, r = runs.find((x) => x.runId === id);
+  return { found: !!r, end: r && r.end, count: runs.length };
+}, study.pendingRunId);
+await pg.mouse.click(450, 220);
+await pg.waitForTimeout(200);
+if (!(study.lum40 > 0.6 && study.lum40 < 0.9)) fails.push(`contrast model: alpha 0.40 should keep 60-90% of luminance contrast, got ${study.lum40}`);
+if (!(study.alphaFor40 < 0.4) || Math.abs(study.roundTrip - 0.4) > 0.01 || !study.alphaForUses)
+  fails.push(`luminance scale: 40% drew at alpha ${study.alphaFor40}, round trip ${study.roundTrip}, alphaFor uses it ${study.alphaForUses}`);
+if (study.added !== 1 || !study.last || study.last.end !== 'left' || study.last.activity !== 'rocks' || !study.last.participant || !study.last.hasScale || !study.last.tuning || !study.last.noTuningCopy)
+  fails.push('history: leaving a run did not file one complete record — ' + JSON.stringify(study.last));
+if (study.csvHeader !== study.csvRow || study.csvRows < 1) fails.push(`runs CSV: ${study.csvHeader} header columns, ${study.csvRow} in the last row`);
+if (study.segRows < 1) fails.push('segments CSV has no rows');
+if (!study.shortSkipped) fails.push('a one-second run was kept in the history');
+if (!study.rejectsOther) fails.push('a protocol could set a setting it has no business setting');
+if (!study.locked || study.contrastRow !== 'note' || !study.easyHidden || !study.flatDisabled)
+  fails.push(`locked protocol: locked ${study.locked}, contrast row "${study.contrastRow}", easy setup hidden ${study.easyHidden}, flat controls disabled ${study.flatDisabled}`);
+if (!study.noniusKept) fails.push('under a locked protocol an alignment answer still changed the contrast');
+if (!study.wrongStays || !study.unlocked) fails.push(`unlocking: a wrong id kept it locked ${study.wrongStays}, the right id unlocked it ${study.unlocked}`);
+if (!recovered.found || recovered.end !== 'interrupted') fails.push(`a run cut short by closing the app was not filed on relaunch (${JSON.stringify(recovered)})`);
+
 /* dev panel builds a control per numeric leaf (it lives in the flat panel) */
 await pg.evaluate(() => GH.flat());
 await pg.click('#btnDevTitle');
@@ -734,4 +819,4 @@ if (!rec.build) fails.push('session log has no build stamp');
 
 await browser.close();
 if (fails.length) { fails.forEach((f) => console.log('FAIL  ' + f)); console.log(`\n${fails.length} failure(s)`); process.exit(1); }
-console.log(`ok [${via}] — tap-to-start then the picker (${booted.games.length} games), ${Object.keys(arcade).length} arcade games per-eye (${Object.entries(arcade).map(([k, v]) => k + ' ' + v.px + 'px').join(', ')}), Blocks clears rows, rocks/race/blocks never end a child's run and cap step-ups, the truck transforms and swims and holding the gas never crashes it (${truckFeel.courses.length} courses), wardens charge/ring/summon/leap, island 2 opens from island 1's light and the boat sails there, English fallback speech, carol ${carol.ctx === 'running' ? 'plays' : 'skipped (audio suspended)'}, flat panels have a way back; ${islands.length} islands winnable, bush/stone/bomb/arrow/torch/light all work, sitting clock survives replay, sailed to island ${sail.island}, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);
+console.log(`ok [${via}] — tap-to-start then the picker (${booted.games.length} games), ${Object.keys(arcade).length} arcade games per-eye (${Object.entries(arcade).map(([k, v]) => k + ' ' + v.px + 'px').join(', ')}), Blocks clears rows, rocks/race/blocks never end a child's run and cap step-ups, the truck transforms and swims and holding the gas never crashes it (${truckFeel.courses.length} courses), wardens charge/ring/summon/leap, island 2 opens from island 1's light and the boat sails there, English fallback speech, carol ${carol.ctx === 'running' ? 'plays' : 'skipped (audio suspended)'}, flat panels have a way back, run history + CSV/JSON export + crash recovery + protocol lock work, alpha 0.40 = ${Math.round(study.lum40 * 100)}% luminance contrast; ${islands.length} islands winnable, bush/stone/bomb/arrow/torch/light all work, sitting clock survives replay, sailed to island ${sail.island}, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);

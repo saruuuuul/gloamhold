@@ -273,7 +273,7 @@ var SPEECH = {
   /* the game picker: each game says its own name */
   g_islands: { mn:'Арлын адал явдал',                       en:'Island adventure' },
   g_truck:   { mn:'Матар машин',                            en:'Gator truck' },
-  g_blocks:  { mn:'Блок',                                   en:'Blocks' },
+  g_blocks:  { mn:'Желе блок',                              en:'Jelly blocks' },
   g_rocks:   { mn:'Сансрын чулуу',                          en:'Space rocks' },
   g_race:    { mn:'Уралдаан',                               en:'Racing' },
   g_shop:    { mn:'Будгийн дэлгүүр',                        en:'Paint shop' },

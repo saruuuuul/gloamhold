@@ -136,7 +136,7 @@ function drawEyeNonius(eye){
     ctx.globalAlpha = 1; ctx.strokeStyle = '#8fd8b4';
     ctx.beginPath(); ctx.moveTo(cx, cy-58); ctx.lineTo(cx, cy+58); ctx.stroke();
   } else {
-    ctx.globalAlpha = Math.max(cfg.strong, 0.08); ctx.strokeStyle = '#f0c76a';
+    ctx.globalAlpha = stimAlpha(Math.max(cfg.strong, 0.08)); ctx.strokeStyle = '#f0c76a';
     ctx.beginPath(); ctx.moveTo(cx-58, cy); ctx.lineTo(cx+58, cy); ctx.stroke();
     ctx.globalAlpha = 1;
   }
@@ -149,6 +149,11 @@ function noniusAnswer(a){
   S.checks.push({ t:S.elapsed, a:a });
   var msg;
   if(a===1){ msg = 'Both bars visible — both eyes are contributing. Settings are usable; play on.'; }
+  else if(cfg.locked){
+    /* a locked protocol's contrast is the study team's call: record, do not adjust */
+    msg = (a===2 ? 'The stronger eye’s bar is gone.' : 'The weaker eye’s bar is gone — that is suppression.')
+        + ' This phone is on study protocol ' + cfg.protocol + ', so the contrast was left as it is. Tell the study team; the answer is in the session record.';
+  }
   else if(a===2){
     msg = 'The stronger eye’s bar is gone. Its contrast is set below what that eye can pick up, so it is out of the task entirely. Raising it one step.';
     cfg.strong = Math.min(1, Math.round((cfg.strong*1.25+0.03)/0.05)*0.05); syncSliders(); saveCfg(); logContrast();

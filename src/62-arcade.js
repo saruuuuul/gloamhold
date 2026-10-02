@@ -54,6 +54,7 @@ function arcadeStart(id, level){
 /* leave whatever is running for the game picker, without awarding the run —
    stars are for finishing or for falling, not for quitting */
 function leaveToHub(){
+  if(LIVE) archiveRun('left');
   running = false; S.ended = true; LIVE = false; letSleep();
   closeMenu(); openMenu('title');
 }

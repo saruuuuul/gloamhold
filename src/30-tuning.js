@@ -142,6 +142,10 @@ var TUNING_DEFAULTS = {
   /* ---- the arcade games, shared ---- */
   arcade: { speakGapSec: 4, endDelayFrames: 100, hitstopFrames: 4, bannerFrames: 90 },
 
+  /* ---- study data: runs shorter than minRunSec are not kept; the history
+     keeps the newest maxRuns ---- */
+  study: { minRunSec: 20, maxRuns: 500 },
+
   /* ---- the paint shop: coins buy colours for the hero, truck, ship and car ---- */
   shop: { basePrice: 20, priceStep: 15 },
 

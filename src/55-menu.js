@@ -334,18 +334,27 @@ function pct(v){ return Math.round(v*100) + '%'; }
 /* SCREENS.title — the game picker — lives in 58-hub.js. Everything that was
    on the old title list is on the grown-up screen below. */
 
+/* Under a locked study protocol the settings the protocol fixes are shown,
+   not offered: a parent adjusting contrast mid-study makes the data
+   meaningless. Comfort settings (lens, separation, sound) stay adjustable. */
+function lockRow(it){
+  if(!cfg.locked || !it.study) return it;
+  return { k:'note', icon:it.icon, label:it.label + ': ' + (menuValueText(it) || '') + ' (locked)' };
+}
 SCREENS.adult = {
   title: 'GROWN-UP',
-  sub: 'the real controls',
+  get sub(){ return cfg.locked ? 'study protocol ' + cfg.protocol + ' · locked' : 'the real controls'; },
   items: function(){
     return [
-      { k:'seg', icon:'eye', label:'Weaker (amblyopic) eye', opts:[['left','Left'],['right','Right']],
+      { k:'seg', icon:'eye', label:'Weaker (amblyopic) eye', opts:[['left','Left'],['right','Right']], study:true,
         get:function(){ return cfg.weakEye; }, set:function(v){ cfg.weakEye = v; } },
-      { k:'num', icon:'bar_h', label:'Stronger-eye contrast', min:0.05, max:1, step:0.05,
+      { k:'num', icon:'bar_h', label:'Stronger-eye contrast', min:0.05, max:1, step:0.05, study:true,
         get:function(){ return cfg.strong; }, set:function(v){ cfg.strong = v; logContrast(); }, fmt:pct },
-      { k:'seg', icon:'cross', label:'Mode', opts:[['rebalance','Rebalance'],['split','Forced fusion']],
+      { k:'seg', icon:'bar_h', label:'Contrast means', opts:[['alpha','Blend alpha'],['luminance','Luminance (est.)']], study:true,
+        get:function(){ return cfg.contrastScale; }, set:function(v){ cfg.contrastScale = v; logContrast(); } },
+      { k:'seg', icon:'cross', label:'Mode', opts:[['rebalance','Rebalance'],['split','Forced fusion']], study:true,
         get:function(){ return cfg.mode; }, set:function(v){ cfg.mode = v; } },
-      { k:'tog', icon:'star', label:'Adaptive staircase', get:function(){ return cfg.adapt; }, set:function(v){ cfg.adapt = v; } },
+      { k:'tog', icon:'star', label:'Adaptive staircase', study:true, get:function(){ return cfg.adapt; }, set:function(v){ cfg.adapt = v; } },
       { k:'num', icon:'goggles', label:'Eye separation', min:-60, max:60, step:2,
         get:function(){ return cfg.sep; }, set:function(v){ cfg.sep = v; }, fmt:function(v){ return v + ' px'; } },
       { k:'num', icon:'grid', label:'Image scale', min:0.6, max:1.4, step:0.05,
@@ -354,13 +363,13 @@ SCREENS.adult = {
         get:function(){ return cfg.lens; }, set:function(v){ cfg.lens = v; if(LENS_PRESETS[v]){ cfg.k1=LENS_PRESETS[v].k1; cfg.k2=LENS_PRESETS[v].k2; cfg.chroma=LENS_PRESETS[v].chroma; } paintSeg(); } },
       { k:'act', icon:'grid', label:'Calibrate against a grid', run:function(){ openMenu('lensgrid'); } },
       { k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } },
-      { k:'tog', icon:'kid', label:'Child mode', get:function(){ return cfg.kidMode; }, set:function(v){ cfg.kidMode = v; } },
+      { k:'tog', icon:'kid', label:'Child mode', study:true, get:function(){ return cfg.kidMode; }, set:function(v){ cfg.kidMode = v; } },
       { k:'tog', icon:'flag', label:'All islands open', get:function(){ return cfg.allIslands; }, set:function(v){ cfg.allIslands = v; } },
-      { k:'num', icon:'flag', label:'Session length', min:0, max:45, step:1,
+      { k:'num', icon:'flag', label:'Session length', min:0, max:45, step:1, study:true,
         get:function(){ return TUNING.session.minutes; },
         set:function(v){ TUNING.session.minutes = v; saveTuning(); },
         fmt:function(v){ return v ? v + ' min' : 'no limit'; } },
-      { k:'act', icon:'star', label:'Easy setup (butterfly)', run:function(){ openMenu('kidIntro'); } },
+      { k:'act', icon:'star', label:'Easy setup (butterfly)', study:true, run:function(){ openMenu('kidIntro'); } },
       { k:'tog', icon: cfg.mute ? 'mute' : 'sound', label:'Sound', get:function(){ return !cfg.mute; }, set:function(v){ cfg.mute = !v; if(v){ audioUnlock(); sfx('uiOk'); } else musicStop(); } },
       { k:'tog', icon:'sound', label:'Music in intense moments', get:function(){ return cfg.music; }, set:function(v){ cfg.music = v; if(!v) musicStop(); } },
       { k:'seg', icon:'sound', label:'Spoken prompts', opts:[['mn','Mongolian (else English)'],['en','English'],['off','Off']],
@@ -369,11 +378,12 @@ SCREENS.adult = {
       { k:'act', icon:'star', label:'My stars', run:function(){ openMenu('stars'); } },
       { k:'act', icon:'flag', label:'This run in numbers', run:function(){ openMenu('report'); } },
       { k:'act', icon:'info', label:'What the easy setup measured', run:function(){ openMenu('measured'); } },
-      { k:'act', icon:'flat', label:'Advanced tuning (flat panel)', run:function(){ openDevStereo('adult'); } },
+      { k:'act', icon:'flat', label:'Advanced tuning (flat panel)', study:true, run:function(){ openDevStereo('adult'); } },
+      { k:'note', icon:'info', label:'Study: ' + (cfg.participant || '—') + ' · ' + studyRunCount() + ' runs saved on this phone' },
       { k:'act', icon:'flat', label:'Flat menus (no viewer)', run:function(){ goFlat(); } },
       { k:'act', icon:'info', label:'Not a medical device', run:function(){ openMenu('safety'); } },
       { k:'act', icon:'back', label:'Back', run:function(){ menuCancel(); } }
-    ];
+    ].map(lockRow).filter(function(it){ return !(cfg.locked && it.k === 'note' && /^(Easy setup|Advanced tuning)/.test(it.label)); });
   }
 };
 
@@ -458,7 +468,7 @@ SCREENS.pause = {
       { k:'act', icon:'play',  label:'Keep playing',      run:function(){ resumeRun(); } },
       { k:'act', icon:'star',  label:'Back to the games', run:function(){ leaveToHub(); } }
     ];
-    if(!ARC.id) out.push({ k:'act', icon:'back', label:'Back to the sea', run:function(){ running = false; S.ended = true; LIVE = false; closeMenu(); openMenu('map'); } });
+    if(!ARC.id) out.push({ k:'act', icon:'back', label:'Back to the sea', run:function(){ archiveRun('left'); running = false; S.ended = true; LIVE = false; closeMenu(); openMenu('map'); } });
     out.push({ k:'act', icon:'cross', label:'Alignment check', run:function(){ startNonius(); } });
     out.push({ k:'act', icon:'gear',  label:'Grown-up setup',  run:function(){ openMenu('adult'); } });
     return out;
@@ -670,6 +680,7 @@ function huntFinish(){
   }
   /* back off one step from the faintest catch — a threshold you only just
      reached in a game is not one to start a session at */
+  if(cfg.locked){ sfx('fanfare'); openMenu('kidSticks', true); return; }
   var base = HUNT.best / (K.huntStepFactor * K.safetyBackoff);
   var v = Math.max(th.minContrast, Math.min(1, Math.round(base/q)*q));
   cfg.strong = v; cfg.kidSet = true;
@@ -722,7 +733,7 @@ function drawKidTarget(eye, vp, u){
     }
   }
   if(!HUNT.shown || HUNT.blank || eye !== strongEye) return;
-  ctx.globalAlpha = HUNT.c;
+  ctx.globalAlpha = stimAlpha(HUNT.c);
   drawButterfly(fx, fy, u*3.2);
   ctx.globalAlpha = 1;
 }
@@ -789,7 +800,7 @@ function drawKidNonius(eye, cx, cy, u){
     ctx.globalAlpha = 1; ctx.strokeStyle = '#8fd8b4';
     ctx.beginPath(); ctx.moveTo(cx, cy - r*0.95); ctx.lineTo(cx, cy + r*0.95); ctx.stroke();
   } else {
-    ctx.globalAlpha = Math.max(cfg.strong, 0.08); ctx.strokeStyle = '#f0c76a';
+    ctx.globalAlpha = stimAlpha(Math.max(cfg.strong, 0.08)); ctx.strokeStyle = '#f0c76a';
     ctx.beginPath(); ctx.moveTo(cx - r*0.95, cy); ctx.lineTo(cx + r*0.95, cy); ctx.stroke();
     ctx.globalAlpha = 1;
   }
@@ -905,6 +916,7 @@ function dayKey(d){
    not playing. */
 function awardSession(){
   if(S.awarded) return S.starsGained;
+  /* filed in the study history once the stars are known (below) */
   S.awarded = true;
   var SS = TUNING.session, I = TUNING.islands, lo = 1;
   var gained = SS.starsFinish + S.cleanRooms * SS.starsCleanRoom
@@ -924,6 +936,7 @@ function awardSession(){
     PROG.lastDay = d;
   }
   saveProg();
+  archiveRun(S.sessionDone ? 'session-end' : (S.won ? 'won' : 'ended'));
   return gained;
 }
 
