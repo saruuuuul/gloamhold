@@ -23,11 +23,11 @@ var RANGE_RULES = [
   [/^(stars|unlock|coinsPerStar|sparkleCoins|secretChestCoins|bombDamage|arrowDamage|bossHpPerIsland)/,
                                                           function(v){ return {min:0, max:Math.max(20, Math.ceil(v*3)), step:1}; }],
   [/Scale$/,                                              function(){ return {min:0.1, max:2, step:0.05}; }],
-  [/^(lives|rivals|lanes|wavesPerLevel|segLines|linesBase|linesStep|lockResets|ringShots|summonCount|summonMax|bugsMin|bugsMax|extraFoes|kingHp|saucerHp|crushCoins|flipStars|basePrice|priceStep|smallHp|bombEvery|flipStarsMax)$/,
+  [/^(lives|rivals|lanes|wavesPerLevel|segLines|linesBase|linesStep|lockResets|ringShots|summonCount|summonMax|bugsMin|bugsMax|extraFoes|kingHp|saucerHp|crushCoins|flipStars|basePrice|priceStep|smallHp|bombEvery|flipStarsMax|flipDelay|lipGrace|flipSafeFrames)$/,
                                                           function(v){ return {min:0, max:Math.max(10, Math.ceil(v*3)), step:1}; }],
   [/Vol$/,                                                function(){ return {min:0, max:1, step:0.01}; }],
   [/^(bpmLow|bpmHigh)$/,                                  function(){ return {min:60, max:240, step:2}; }],
-  [/^(startAt|lookahead|landTol|iceGrip)$/,               function(){ return {min:0, max:1.5, step:0.01}; }],
+  [/^(startAt|lookahead|landTol|kidLandTol|iceGrip|slopePull|flipRate|levelRate|maxTurn|lipKick)$/, function(){ return {min:0, max:3.2, step:0.01}; }],
   [/^(lenBase|lenStep|stageBase|stageStep)$/,             function(v){ return {min:0, max:Math.ceil(v*3), step:50}; }]
 ];
 function rangeFor(path, v){
@@ -61,7 +61,7 @@ var SECTION_NOTE = {
   blocks:  'Falling blocks. gravity is frames per row; segLines lines make one staircase step.',
   rocks:   'Space Rocks. Speeds are field units per frame.',
   race:    'Top-down racer. Distances are field units.',
-  truck:   'Gator Truck. gravity per frame; hopV is the jump; landTol is how crooked a landing may be (radians).'
+  truck:   'Gator Truck. The stick is only the gas; the truck levels itself in the air, and holding A flips it. landTol / kidLandTol are how crooked a landing may be (radians); slopePull under 1 keeps every hill climbable.'
 };
 var devBuilt = false;
 function buildDevPanel(){
@@ -226,6 +226,7 @@ try{
     busy: function(){ var M = GAMES[ARC.id]; return M && M.busy ? M.busy(ARC.g) : null; },
     arcadeEnd: arcadeEnd,
     raceCentre: function(d){ return rcCenter(ARC.g, d); },
+    truckGround: function(x){ return tkGround(ARC.g, x); },
     games: function(){ return hubList(); },
     get hub(){ return HUB; },
     get stair(){ return STAIR; },

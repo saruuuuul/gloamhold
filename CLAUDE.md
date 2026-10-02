@@ -275,6 +275,15 @@ still looks fine, which is the worst kind of bug here.
 - **Hit-stop eats steps.** `arcHitstop()` freezes a game for a few frames after an impact, so
   a test that forces a second hit on the next `GH.astep(1)` sees nothing happen. Clear
   `GH.arc.hit` between forced impacts.
+- **Gator Truck: one control, one job.** The stick used to be the gas on the ground AND the
+  lean in the air, so a child holding the gas tipped the nose down on every hop, crest and
+  crushed car and crashed on landing — levels 3–5 could not be finished that way. The stick is
+  now only the gas; the truck levels itself in the air and holding A flips it. The truck rests
+  on its two wheels (`tkRest`), a ramp's lip is found at the FRONT wheel (the ground under it
+  falls away much faster than it has been), and landing is a wheel touching down — judging
+  either from the middle of the truck made it drive off lips nose-first or land back on the
+  ramp a frame after leaving it. `tests/smoke.mjs` holds the gas through every course and
+  fails on any crash.
 - **A finished dungeon's `G` lingers.** Paths that end a dungeon run on a press (`G.dead ||
   G.won`) must also check `!ARC.id`, or a key press in an arcade game ends it.
 - `__BUILD__` is substituted by `build.py` in both the bundle and `public/*` text files. The

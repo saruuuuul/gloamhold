@@ -530,6 +530,45 @@ else {
   if (!mech2.truckSub || !mech2.truckAcross) fails.push('Gator Truck: the sub did not get across the lake');
 }
 
+/* Gator Truck handling: a child who just holds the stick (the gas) must get
+   through every course without crashing — the stick once also leaned the truck
+   in the air, and holding the gas crashed it on nearly every landing. Ramps
+   must throw the truck into real air, holding A there must flip it and still
+   land in child mode, and the sub must not turn back into a truck in water. */
+const truckFeel = await pg.evaluate(() => {
+  const out = { courses: [] };
+  const I = GH.input;
+  const reset = () => { I.x = I.y = 0; I.atk = I.tool = I.toolPress = I.cycle = I.act = false; };
+  for (const lv of [1, 2, 3, 4, 5, 6]) {
+    GH.cfg.kidMode = true; GH.arcade('truck', lv); GH.freeze(); reset();
+    const g = GH.arc.g, t = g.t;
+    let maxAir = 0;
+    for (let f = 0; f < 60 * 60 && !GH.arc.won; f++) {
+      I.x = 1;
+      I.atk = t.grounded && !!g.boulders.find((q) => q.x > t.x && q.x - t.x < 30);
+      const gate = g.gates.find((q) => t.x > q.x - 40 && t.x < q.x + 40 && q.form !== t.form);
+      I.toolPress = !!gate && f % 30 === 0;
+      I.act = !t.grounded;
+      GH.arc.hit = 0; GH.astep(1);
+      maxAir = Math.max(maxAir, t.air);
+    }
+    out.courses.push({ lv, crashes: g.crashes, done: GH.arc.won, maxAir, flips: g.flipStars });
+  }
+  /* B at the exit sign while still swimming: stays a sub, stays in the lake */
+  GH.cfg.kidMode = true; GH.arcade('truck', 5); GH.freeze(); reset();
+  const g = GH.arc.g, lake = g.lakes[0], exitGate = g.gates.find((q) => q.form === 'truck');
+  g.t.form = 'sub'; g.t.x = lake.x1 - 20; g.t.y = lake.wy + 10; g.t.grounded = true;
+  I.toolPress = true; GH.astep(1); GH.astep(5);
+  out.wetStaysSub = g.t.form === 'sub' && g.t.x > lake.x0 + 100 && exitGate.x - g.t.x < 80;
+  return out;
+});
+for (const c of truckFeel.courses) {
+  if (c.crashes > 0 || !c.done) fails.push(`Gator Truck level ${c.lv}: holding the gas crashed ${c.crashes} times (finished=${c.done})`);
+}
+if (!truckFeel.courses.some((c) => c.maxAir >= 30)) fails.push('Gator Truck: no ramp threw the truck into real air');
+if (!truckFeel.courses.some((c) => c.flips > 0)) fails.push('Gator Truck: holding A in the air never flipped the truck');
+if (!truckFeel.wetStaysSub) fails.push('Gator Truck: B at the exit sign made a truck in the water (it used to send him back to the start of the lake)');
+
 /* exposure telemetry and the session log, with the real loop running */
 const expo = await pg.evaluate(async () => {
   const s = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -695,4 +734,4 @@ if (!rec.build) fails.push('session log has no build stamp');
 
 await browser.close();
 if (fails.length) { fails.forEach((f) => console.log('FAIL  ' + f)); console.log(`\n${fails.length} failure(s)`); process.exit(1); }
-console.log(`ok [${via}] — tap-to-start then the picker (${booted.games.length} games), ${Object.keys(arcade).length} arcade games per-eye (${Object.entries(arcade).map(([k, v]) => k + ' ' + v.px + 'px').join(', ')}), Blocks clears rows, rocks/race/blocks never end a child's run and cap step-ups, the truck transforms and swims, wardens charge/ring/summon/leap, island 2 opens from island 1's light and the boat sails there, English fallback speech, carol ${carol.ctx === 'running' ? 'plays' : 'skipped (audio suspended)'}, flat panels have a way back; ${islands.length} islands winnable, bush/stone/bomb/arrow/torch/light all work, sitting clock survives replay, sailed to island ${sail.island}, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);
+console.log(`ok [${via}] — tap-to-start then the picker (${booted.games.length} games), ${Object.keys(arcade).length} arcade games per-eye (${Object.entries(arcade).map(([k, v]) => k + ' ' + v.px + 'px').join(', ')}), Blocks clears rows, rocks/race/blocks never end a child's run and cap step-ups, the truck transforms and swims and holding the gas never crashes it (${truckFeel.courses.length} courses), wardens charge/ring/summon/leap, island 2 opens from island 1's light and the boat sails there, English fallback speech, carol ${carol.ctx === 'running' ? 'plays' : 'skipped (audio suspended)'}, flat panels have a way back; ${islands.length} islands winnable, bush/stone/bomb/arrow/torch/light all work, sitting clock survives replay, sailed to island ${sail.island}, ${booted.screens} stereo screens, ${sfxErrors.effects} sounds, ${menuDiff.checked} screens binocular, catch trials caught the masher (${trials.masher.fa} false alarms) and passed the honest run, child mode ${child.maxhp} hp, wizard ${kid.presented.length} rounds -> ${Math.round(kid.strong * 100)}%, ${sliders} tuning sliders, contrast delta touched ${diff} px, ${rec.rooms.length} room(s) logged`);

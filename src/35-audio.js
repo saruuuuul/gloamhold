@@ -287,6 +287,7 @@ var SPEECH = {
   oops_ok:   { mn:'Зүгээр дээ, үргэлжлүүлье!',              en:'That is okay, keep going!' },
   bigjump:   { mn:'Том үсрэлт!',                            en:'Big jump!' },
   hop:       { mn:'А товчоор үсэр!',                        en:'Press A to jump!' },
+  t_flip:    { mn:'Агаарт А товчийг дарсаар байвал эргэнэ!', en:'Hold A in the air to do a flip!' },
   t_sub:     { mn:'B товчоор шумбагч болоорой!',            en:'Press B to become a submarine!' },
   t_mini:    { mn:'B товчоор жижиг машин болоорой!',        en:'Press B to become a mini truck!' },
   t_truck:   { mn:'B товчоор том машин болоорой!',          en:'Press B to become a big truck!' },

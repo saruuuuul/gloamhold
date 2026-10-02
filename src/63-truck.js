@@ -8,6 +8,15 @@
      truck  crushes junk cars, hops boulders with A, flips on big jumps
      mini   small and quick — the only form that fits through a tunnel
      sub    dives through a lake; slow and floppy on dry land
+   Controls are one job each. The stick is the gas and the brake, and only
+   that — it used to lean the truck in the air as well, so a child holding
+   the gas tipped the nose down on every hop, every crest and every crushed
+   car, and crashed on landing (levels 3 to 5 could not be finished that
+   way). Now the truck levels itself in the air and lands on its wheels; A
+   hops, and HOLDING A in the air flips it, which is the trick that pays.
+   The truck rests on its two wheels, so it sits on a bump the way a truck
+   does, and the engine always beats a hill.
+
    Every gate has a SIGN showing the form it needs, and the sign is on
    the clue layer: finding it is a looking job for the weaker eye. Miss
    it and the gator says so; in child mode it changes by itself after
@@ -41,7 +50,7 @@ var TK_PLANS = [
   ['ramp', 'hills', 'boulders', 'ramp', 'tunnel']
 ];
 var TK_FORMS = {
-  truck:{ h:16, half:12 }, mini:{ h:8, half:7 }, sub:{ h:11, half:11 }
+  truck:{ h:16, half:12, base:8 }, mini:{ h:8, half:7, base:4.5 }, sub:{ h:11, half:11, base:8 }
 };
 
 /* ---------------- the course ---------------- */
@@ -52,6 +61,12 @@ function tkGround(g, x){
   return g.hm[a] + (g.hm[a + 1] - g.hm[a])*f;
 }
 function tkSlope(g, x){ return Math.atan2(tkGround(g, x + 3) - tkGround(g, x - 3), 6); }
+/* where the truck rests with both wheels on the ground: the height between
+   them and the angle of the line through them */
+function tkRest(g, x, form){
+  var b = TK_FORMS[form].base, gr = tkGround(g, x - b), gf = tkGround(g, x + b);
+  return { y:(gr + gf)/2, a:Math.atan2(gf - gr, 2*b) };
+}
 function tkCeil(g, x){
   for(var i=0; i<g.tunnels.length; i++){ var t = g.tunnels[i]; if(x >= t.x0 && x <= t.x1) return t.y; }
   return -1e9;
@@ -83,7 +98,7 @@ function tkBuild(g){
   for(i=0; i<plan.length; i++){
     var kind = plan[i], L = 340, x0 = x;
     if(kind === 'hills'){
-      var A = (10 + rnd()*14)*soft, humps = 1 + Math.floor(rnd()*3);
+      var A = (8 + rnd()*10)*soft, humps = 1 + Math.floor(rnd()*2);
       fill(x0, L, function(lx){ return TK_GY - A*(1 - Math.cos(6.2832*humps*lx/L))/2; });
       for(var h=0; h<humps; h++){
         var hx = x0 + (h + 0.5)*L/humps;
@@ -158,6 +173,14 @@ function tkNearGate(g){
   return null;
 }
 function tkClearOfRock(g, x){ return tkCeil(g, x - 14) < -1e8 && tkCeil(g, x + 14) < -1e8; }
+/* out of the water entirely: a truck or mini made while still swimming would
+   sink, and used to be sent back to the start of the lake */
+function tkDry(g, x){ return tkDepth(g, x - 14) <= 1 && tkDepth(g, x) <= 1 && tkDepth(g, x + 14) <= 1; }
+function tkCanBecome(g, form, x){
+  if(form === 'sub') return true;
+  if(!tkDry(g, x)) return false;
+  return form !== 'truck' || tkClearOfRock(g, x);
+}
 /* the next gate ahead that wants a different form */
 function tkGateAhead(g){
   var t = g.t, i;
@@ -178,20 +201,21 @@ function tkCrash(g){
 }
 function tkRespawn(g){
   var t = g.t, x = g.cp;
-  t.x = x; t.y = tkGround(g, x); t.vx = 0; t.vy = 0; t.a = tkSlope(g, x); t.va = 0;
+  t.x = x; t.vx = 0; t.vy = 0; t.va = 0; t.vyG = 0; t.fg = null;
   t.grounded = true; t.crash = 0; t.inv = 70; t.air = 0; t.rot = 0;
   if(tkLakeAt(g, x) && tkDepth(g, x) > 3) t.form = 'sub';
   else if(tkCeil(g, x) > -1e8) t.form = 'mini';
   else if(t.form === 'sub') t.form = 'truck';
+  var rest = tkRest(g, x, t.form); t.y = rest.y; t.a = rest.a;
   /* cut straight to him: a camera sweeping back across the course is motion
      he did not make, and that is what makes people sick in a viewer */
   g.cam.x = t.x - 70; g.cam.y = Math.min(TK_GY - 104, t.y - 100);
 }
 function tkLand(g){
-  var t = g.t, T = TUNING.truck, sl = tkSlope(g, t.x);
+  var t = g.t, T = TUNING.truck, rest = tkRest(g, t.x, t.form), sl = rest.a;
   var diff = Math.atan2(Math.sin(t.a - sl), Math.cos(t.a - sl));
-  t.y = tkGround(g, t.x);
-  if(Math.abs(diff) > T.landTol){ tkCrash(g); return; }
+  t.y = rest.y;
+  if(Math.abs(diff) > (cfg.kidMode ? T.kidLandTol : T.landTol)){ tkCrash(g); return; }
   var flips = Math.floor(Math.abs(t.rot)/6.2832 + 0.15);
   if(flips > 0){
     /* stars for flips are capped per stage, so a flip is a treat, not a farm */
@@ -202,7 +226,7 @@ function tkLand(g){
   }
   else if(t.air > 44) arcSay('bigjump');
   if(t.air > 10){ sfx('land'); t.squash = 8; }
-  t.grounded = true; t.a = sl; t.va = 0; t.rot = 0; t.air = 0;
+  t.grounded = true; t.a = sl; t.va = 0; t.rot = 0; t.air = 0; t.vyG = 0; t.fg = null;
   t.vx *= 0.92;
 }
 
@@ -213,7 +237,7 @@ GAMES.truck = {
   start: function(lv){
     var g = { lv:lv, theme:TK_THEMES[(lv - 1) % TK_THEMES.length],
               t:{ x:60, y:TK_GY, vx:0, vy:0, a:0, va:0, grounded:true, form:'truck', crash:0, inv:40, air:0, rot:0, wheel:0, squash:0, honk:0 },
-              cam:{ x:0, y:TK_GY - 104 }, cp:60, seg:1, crashes:0, stuck:0, subLand:0, hopSaid:false, flipStars:0,
+              cam:{ x:0, y:TK_GY - 104 }, cp:60, seg:1, crashes:0, stuck:0, subLand:0, hopSaid:false, flipStars:0, flipSaid:false,
               fxFoe:[], fxItem:[], fxClue:[], fxPlayer:[] };
     tkBuild(g);
     g.cam.x = g.t.x - 70;
@@ -242,8 +266,8 @@ GAMES.truck = {
     if(input.toolPress){
       var gate = tkNearGate(g);
       if(gate && gate.form !== t.form){
-        /* never grow into the big truck while any of it is still under rock */
-        if(gate.form !== 'truck' || tkClearOfRock(g, t.x)) tkTransform(g, gate.form);
+        /* never grow into the big truck under rock, nor leave the sub in water */
+        if(tkCanBecome(g, gate.form, t.x)) tkTransform(g, gate.form);
         else sfx('bump');
       } else if(t.honk <= 0){ sfx('honk'); t.honk = 20; }
     }
@@ -262,30 +286,66 @@ GAMES.truck = {
       if(g.t.x % 40 < 1.2 && Math.random() < 0.3) fxBurst(g.fxPlayer, t.x - 10, t.y - 6, 1, '#8fb3cf', 0.3, 30, 1.6);
     } else if(t.grounded){
       var top = t.form === 'mini' ? T.miniSpeed : (t.form === 'sub' ? T.subLandSpeed : T.maxSpeed);
-      var sl = tkSlope(g, t.x);
-      t.vx += thr*T.accel*((thr < 0 && t.vx > 0) ? 2 : 1);
-      t.vx += grav*Math.sin(sl)*0.9;
+      var sl = tkRest(g, t.x, t.form).a;
+      /* let go of the stick when slow and it stays put, even on a slope —
+         rolling back down a hill he was not steering is what felt wrong */
+      if(Math.abs(thr) <= 0.15 && Math.abs(t.vx) < 0.25) t.vx = 0;
+      else {
+        t.vx += thr*T.accel*((thr < 0 && t.vx > 0) ? 2 : 1);
+        t.vx += grav*Math.sin(sl)*T.slopePull;
+      }
       t.vx *= T.drag;
       t.vx = Math.max(-top*0.5, Math.min(top, t.vx));
       /* water stops a land form at the shore; a low ceiling stops the big truck */
       var nx = t.x + t.vx, front = nx + (t.vx >= 0 ? F.half : -F.half);
       if(t.form !== 'sub' && tkDepth(g, front) > 3){ t.vx = 0; nx = t.x; }
       if(tkCeil(g, front) > t.y - F.h - 2 && tkCeil(g, front) > -1e8 && t.form === 'truck'){ if(Math.abs(t.vx) > 0.4) sfx('bump'); t.vx = -t.vx*0.3; nx = t.x + t.vx; }
-      var oy = t.y + (nx - t.x)*Math.tan(sl);
+      /* The truck rests on whichever wheel has ground under it and turns
+         toward the ground's angle no faster than maxTurn. A ramp's LIP is
+         found at the front wheel: the ground under it suddenly falls away much
+         faster than it has been, and at speed the whole truck leaves the ramp
+         on the ramp's own heading and climb. (Judging this from the middle of
+         the truck made it drive off the lip nose-first, or fly for one frame
+         and land back on the ramp.) Rolling slowly off an edge just drops. */
+      var b = F.base, prevY = t.y;
       t.x = nx;
-      var gyN = tkGround(g, t.x);
-      if(oy < gyN - 1.5 && t.vx > 0.4){ t.grounded = false; t.y = oy; t.vy = t.vx*Math.tan(sl); t.air = 0; t.rot = 0; }
-      else { t.y = gyN; t.a += (tkSlope(g, t.x) - t.a)*0.35; }
+      var rest = tkRest(g, t.x, t.form);
+      var a2 = t.a + Math.max(-T.maxTurn, Math.min(T.maxTurn, rest.a - t.a)), s2 = Math.sin(a2), c2 = Math.cos(a2);
+      var ySup = Math.min(tkGround(g, t.x - b*c2) + b*s2, tkGround(g, t.x + b*c2) - b*s2);
+      var fg = tkGround(g, t.x + b*c2), lip = t.fg != null && fg > t.fg + (t.fd || 0) + T.liftDrop && t.vx > 0.6;
+      t.fd = t.fg == null ? 0 : fg - t.fg; t.fg = fg;
+      if(lip){
+        /* a ramp throws the truck up, not just off: that is the big air */
+        t.grounded = false; t.vy = (t.vyG || 0) - (t.form === 'sub' ? 0 : T.lipKick); t.y = prevY + (t.vyG || 0);
+        t.air = 0; t.rot = 0; t.grace = T.lipGrace; t.fg = null; sfx('hop');
+      } else if(ySup > prevY + Math.max(0, t.vyG || 0) + T.liftDrop){
+        t.grounded = false; t.vy = Math.max(0, t.vyG || 0); t.air = 0; t.rot = 0; t.grace = 0; t.fg = null; t.a = a2;
+      } else { t.a = a2; t.y = ySup; t.vyG = t.y - prevY; }
       if(input.atk && t.grounded && t.form !== 'sub'){
         t.vy = -(t.form === 'mini' ? T.miniHopV : T.hopV) + t.vx*Math.tan(sl)*0.5;
-        t.grounded = false; t.air = 0; t.rot = 0; sfx('hop');
+        t.grounded = false; t.air = 0; t.rot = 0; t.grace = 0; t.fg = null; sfx('hop');
       }
       if(t.form === 'sub' && lake && t.y >= lake.wy - 1){ sfx('splash'); }
     } else {
-      /* in the air: the stick leans the truck; a whole turn is a flip */
+      /* in the air the truck turns itself to land on its wheels; holding A
+         (not the stick) spins it backwards, and a whole turn is a flip */
       t.vy += grav; t.x += t.vx; t.y += t.vy; t.air++;
-      t.va = t.va*T.leanDamp + thr*T.lean;
-      t.a += t.va; t.rot += t.va;
+      var da, flipping = input.act && t.air > T.flipDelay && t.form !== 'sub';
+      /* in child mode the truck always comes round to land on its wheels:
+         a few frames before touching down it stops spinning and levels */
+      if(flipping && cfg.kidMode){
+        var h = tkGround(g, t.x + t.vx*6) - t.y, disc = t.vy*t.vy + 2*grav*Math.max(0, h);
+        if(h < 0 || (-t.vy + Math.sqrt(disc))/grav < T.flipSafeFrames) flipping = false;
+      }
+      if(flipping) da = -T.flipRate;
+      else {
+        /* level to the ground it will land on, a little ahead — not the cliff
+           it has just left, which made the nose dip in mid-air */
+        var want = tkRest(g, t.x + t.vx*12, t.form).a, off = Math.atan2(Math.sin(want - t.a), Math.cos(want - t.a));
+        da = Math.max(-T.levelRate, Math.min(T.levelRate, off));
+      }
+      t.a += da; t.rot += da; t.va = da;
+      if(t.air === 30 && !g.flipSaid && g.flipStars === 0 && t.form === 'truck'){ g.flipSaid = true; arcSay('t_flip'); }
       var ceil = tkCeil(g, t.x);
       if(t.y - F.h < ceil){ t.y = ceil + F.h; t.vy = Math.max(0, t.vy); }
       if(t.form === 'sub' && lake && t.y > lake.wy){ t.grounded = true; sfx('splash'); t.vy *= 0.3; }
@@ -295,7 +355,12 @@ GAMES.truck = {
         t.grounded = true; t.a = 0; t.va = 0; t.rot = 0; t.air = 0;
         sfx('splash'); arcSay('t_sub', true);
       }
-      else if(t.y >= tkGround(g, t.x)) tkLand(g);
+      else {
+        /* it has landed when a wheel touches the ground — not in the first
+           few frames off a lip, while the back wheels are still over the ramp */
+        var bw = F.base, cw = Math.cos(t.a), sw = Math.sin(t.a);
+        if(t.air > (t.grace || 0) && (t.y - bw*sw >= tkGround(g, t.x - bw*cw) || t.y + bw*sw >= tkGround(g, t.x + bw*cw))) tkLand(g);
+      }
     }
     t.wheel += t.vx*0.35;
     t.x = Math.max(20, t.x);
@@ -304,9 +369,9 @@ GAMES.truck = {
     var pushing = thr > 0.5 && Math.abs(t.vx) < 0.15;
     if(ahead && pushing) g.stuck++; else g.stuck = Math.max(0, g.stuck - 2);
     if(ahead && g.stuck === Math.round(T.hintSec*60)) arcSay('t_' + ahead.form, true);
-    if(ahead && cfg.kidMode && g.stuck >= Math.round(T.autoSec*60) && (ahead.form !== 'truck' || tkClearOfRock(g, t.x))) tkTransform(g, ahead.form);
+    if(ahead && cfg.kidMode && g.stuck >= Math.round(T.autoSec*60) && tkCanBecome(g, ahead.form, t.x)) tkTransform(g, ahead.form);
     /* a sub left on dry land after its lake is slow — in child mode it turns back into a truck */
-    if(t.form === 'sub' && !lake && tkClearOfRock(g, t.x)){
+    if(t.form === 'sub' && tkCanBecome(g, 'truck', t.x)){
       if(++g.subLand === Math.round(T.hintSec*60)) arcSay('t_truck', true);
       if(cfg.kidMode && g.subLand >= Math.round(T.autoSec*60)) tkTransform(g, 'truck');
     } else g.subLand = 0;
@@ -370,7 +435,7 @@ GAMES.truck = {
   idle: function(g){
     var t = g.t;
     fxStep(g.fxFoe, 0.05); fxStep(g.fxItem, 0); fxStep(g.fxClue, 0); fxStep(g.fxPlayer, 0);
-    if(t.grounded && !t.crash){ t.vx *= 0.97; t.x += t.vx; t.y = tkGround(g, t.x); t.wheel += t.vx*0.35; }
+    if(t.grounded && !t.crash){ t.vx *= 0.97; t.x += t.vx; var rs = tkRest(g, t.x, t.form); t.y = rs.y; t.a = rs.a; t.wheel += t.vx*0.35; }
     tkCamera(g);
   },
   busy: function(g){
