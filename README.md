@@ -5,12 +5,33 @@ island dungeon crawler, a transforming monster truck, falling blocks, a space-ro
 a top-down racer. The two halves of the screen feed one eye each through a Cardboard-style
 viewer, and each game is arranged so that neither eye can finish it alone.
 
+**[Play it in the browser](https://saruuuuul.github.io/gloamhold/)** — free, no account, works
+offline once loaded. You need a phone (Android with Chrome works best: iPhones cannot go
+fullscreen in a browser), a Cardboard-style viewer, and ideally a Bluetooth gamepad
+([On the phone](#on-the-phone)).
+
 > **Not a medical device.** This is a hobby build, not a treatment. Dichoptic training for
 > amblyopia is an active research area with mixed results and belongs under the supervision
 > of an optometrist or ophthalmologist who has measured your acuity, stereoacuity and
 > suppression. Stop if you get headache, nausea, eye strain, or double vision that persists
 > after taking the viewer off. Children should only do this on a clinician's instruction,
 > since the alternative treatments they might be skipping have real evidence behind them.
+
+![Space Rocks as the two eyes see it: the rock king is faint in the stronger eye's half (left) and at full strength in the weaker eye's half (right); the ship and the frame are identical in both](docs/screenshots/rocks.png)
+
+*Space Rocks as the two eyes see it. Left half: the stronger eye, where the rock king and the
+rocks are drawn faint. Right half: the weaker eye, at full strength. The ship, the frame and
+the corner brackets are the same in both, so there is always something to fuse on. (Lens
+correction off for the picture; with a viewer it is on.)*
+
+| | |
+|---|---|
+| ![The game picker: one big picture, one big button](docs/screenshots/picker.png) | ![Island dungeon](docs/screenshots/islands.png) |
+| The game picker — no reading needed | Islands: the dungeon crawler |
+| ![Gator Truck in mid-air over a ramp](docs/screenshots/truck.png) | ![Jelly Blocks](docs/screenshots/blocks.png) |
+| Gator Truck | Jelly Blocks |
+| ![Top-down racer](docs/screenshots/race.png) | ![Space Rocks with the Cardboard lens correction on](docs/screenshots/lens.png) |
+| Racer | With the lens correction on, as the phone shows it |
 
 ---
 
